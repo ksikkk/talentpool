@@ -99,15 +99,25 @@ def import_mail(db,raw,secret,trusted_sender):
     with db:
         if db.execute("SELECT 1 FROM incoming_batch WHERE batch_id=?",(batch,)).fetchone():
             return "duplicate"
+        columns={row["name"] for row in db.execute("PRAGMA table_info(talent)")}
+        curated_available="edited_fields_json" in columns
         for p in people:
-            db.execute("""INSERT INTO talent(identity_key,name,org,headline,domain,location,summary,why_fit,sources_json,created_at,updated_at)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?)
-              ON CONFLICT(identity_key) DO UPDATE SET
-              headline=excluded.headline, domain=excluded.domain, location=excluded.location,
-              summary=excluded.summary, why_fit=excluded.why_fit, sources_json=excluded.sources_json,
-              updated_at=excluded.updated_at""",
-              (key_for(p),p["name"],p["org"],p["headline"],p["domain"],p["location"],p["summary"],
+            identity=key_for(p)
+            db.execute("""INSERT OR IGNORE INTO talent(identity_key,name,org,headline,domain,location,summary,why_fit,sources_json,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+              (identity,p["name"],p["org"],p["headline"],p["domain"],p["location"],p["summary"],
                p["why_fit"],json.dumps(p["sources"],ensure_ascii=False),now,now))
+            row=db.execute("SELECT * FROM talent WHERE identity_key=?",(identity,)).fetchone()
+            protected=set(json.loads(row["edited_fields_json"] or "[]")) if curated_available else set()
+            new_values={"headline":p["headline"],"domain":p["domain"],"location":p["location"],
+                        "summary":p["summary"],"why_fit":p["why_fit"],
+                        "sources_json":json.dumps(p["sources"],ensure_ascii=False)}
+            new_values={k:v for k,v in new_values.items() if
+                        ("sources" if k=="sources_json" else k) not in protected}
+            new_values["updated_at"]=now
+            assignments=", ".join(k+"=?" for k in new_values)
+            db.execute("UPDATE talent SET "+assignments+" WHERE identity_key=?",
+                       [*new_values.values(),identity])
         db.execute("INSERT INTO incoming_batch(batch_id,message_id,received_at,talent_count) VALUES(?,?,?,?)",
                    (batch,message_id,now,len(people)))
     return "imported"

@@ -22,6 +22,20 @@ def connect_db(path):
       batch_id TEXT PRIMARY KEY, message_id TEXT,
       received_at TEXT NOT NULL, talent_count INTEGER NOT NULL);
     """)
+    # Additive migration applies even if mail receiver runs before the web viewer.
+    existing={r["name"] for r in db.execute("PRAGMA table_info(talent)")}
+    for key,kind in [
+        ("requested_field","TEXT NOT NULL DEFAULT ''"),
+        ("email","TEXT NOT NULL DEFAULT ''"),
+        ("email_source","TEXT NOT NULL DEFAULT ''"),
+    ]:
+        if key not in existing: db.execute("ALTER TABLE talent ADD COLUMN "+key+" "+kind)
+    db.execute("""CREATE TABLE IF NOT EXISTS talent_field(
+        talent_id INTEGER NOT NULL, field TEXT NOT NULL,
+        PRIMARY KEY(talent_id,field)
+    )""")
+    db.execute("""INSERT OR IGNORE INTO talent_field(talent_id,field)
+        SELECT id,requested_field FROM talent WHERE requested_field!=''""")
     db.commit()
     return db
 
@@ -81,14 +95,24 @@ def parse_mail(raw, secret, trusted_sender):
     people=payload.get("talents")
     if not isinstance(people,list) or not 1<=len(people)<=50: raise ValueError("invalid talent list")
     required={"name","org","headline","domain","location","summary","why_fit","sources"}
+    optional={"requested_field","email","email_source"}
     for p in people:
-        if not isinstance(p,dict) or set(p)!=required: raise ValueError("unexpected talent fields")
+        if not isinstance(p,dict) or not required.issubset(p) or not set(p).issubset(required|optional):
+            raise ValueError("unexpected talent fields")
         if not all(isinstance(p[k],str) and len(p[k])<=3000 for k in required-{"sources"}):
             raise ValueError("invalid person field")
         if not p["name"].strip() or not p["org"].strip(): raise ValueError("missing name or organization")
         sources=p["sources"]
         if not isinstance(sources,list) or not 1<=len(sources)<=8 or not all(isinstance(u,str) and len(u)<1500 and valid_url(u) for u in sources):
             raise ValueError("invalid sources")
+        if not isinstance(p.get("requested_field",""),str) or len(p.get("requested_field",""))>130:
+            raise ValueError("invalid requested field")
+        mail=p.get("email","")
+        proof=p.get("email_source","")
+        if not isinstance(mail,str) or not isinstance(proof,str) or len(mail)>254 or len(proof)>1500:
+            raise ValueError("invalid professional email")
+        if bool(mail)!=bool(proof) or (mail and (not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",mail) or not valid_url(proof) or proof not in sources)):
+            raise ValueError("invalid professional email")
     return batch,people,msg.get("Message-ID","")
 
 def import_mail(db,raw,secret,trusted_sender):
@@ -103,10 +127,11 @@ def import_mail(db,raw,secret,trusted_sender):
         curated_available="edited_fields_json" in columns
         for p in people:
             identity=key_for(p)
-            db.execute("""INSERT OR IGNORE INTO talent(identity_key,name,org,headline,domain,location,summary,why_fit,sources_json,created_at,updated_at)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            db.execute("""INSERT OR IGNORE INTO talent(identity_key,name,org,headline,domain,location,summary,why_fit,sources_json,created_at,updated_at,requested_field,email,email_source)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
               (identity,p["name"],p["org"],p["headline"],p["domain"],p["location"],p["summary"],
-               p["why_fit"],json.dumps(p["sources"],ensure_ascii=False),now,now))
+               p["why_fit"],json.dumps(p["sources"],ensure_ascii=False),now,now,
+               p.get("requested_field",""),p.get("email",""),p.get("email_source","")))
             row=db.execute("SELECT * FROM talent WHERE identity_key=?",(identity,)).fetchone()
             protected=set(json.loads(row["edited_fields_json"] or "[]")) if curated_available else set()
             new_values={"headline":p["headline"],"domain":p["domain"],"location":p["location"],
@@ -114,6 +139,14 @@ def import_mail(db,raw,secret,trusted_sender):
                         "sources_json":json.dumps(p["sources"],ensure_ascii=False)}
             new_values={k:v for k,v in new_values.items() if
                         ("sources" if k=="sources_json" else k) not in protected}
+            if p.get("email") and not row["email"] and "email" not in protected:
+                new_values["email"]=p["email"]
+                new_values["email_source"]=p.get("email_source","")
+            if p.get("requested_field") and not row["requested_field"]:
+                new_values["requested_field"]=p["requested_field"]
+            if p.get("requested_field"):
+                db.execute("INSERT OR IGNORE INTO talent_field(talent_id,field) VALUES(?,?)",
+                           (row["id"],p["requested_field"]))
             new_values["updated_at"]=now
             assignments=", ".join(k+"=?" for k in new_values)
             db.execute("UPDATE talent SET "+assignments+" WHERE identity_key=?",
@@ -144,7 +177,7 @@ def poll_once():
                 allowed={"oversize message","unexpected recipient","unexpected sender","missing JSON text",
                          "invalid marker","invalid JSON attachment","multiple JSON attachments","invalid HMAC signature","invalid schema","invalid batch ID",
                          "invalid talent list","unexpected talent fields","invalid person field",
-                         "missing name or organization","invalid sources"}
+                         "missing name or organization","invalid sources","invalid requested field","invalid professional email"}
                 reason=str(exc) if isinstance(exc,ValueError) and str(exc) in allowed else type(exc).__name__
                 print(f"Rejected message #{n}: {reason}",file=sys.stderr)
     finally:

@@ -70,45 +70,64 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 <script>
 "use strict";
 const $=id=>document.getElementById(id),make=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
-let people=[],selected=null,metric="all";
+let people=[],selected=null,metric="all",domainFilter="",editing=false;
 async function api(path,opts){const r=await fetch(path,{credentials:"same-origin",...opts});if(!r.ok){let detail="";try{detail=(await r.json()).detail||""}catch{}throw Error(detail||"서버 오류 "+r.status)}return r.json()}
 function field(label,kind,value,options=[]){const box=make("div","field"),lab=make("label","",label),ctrl=make(kind);if(kind==="select")for(const o of options){const opt=make("option","",o);ctrl.append(opt)}if(kind==="textarea")ctrl.rows=3;ctrl.value=value??"";box.append(lab,ctrl);return {box,ctrl}}
 function stats(){ $("total").textContent=people.length;$("core").textContent=people.filter(x=>x.priority==="핵심").length;$("contact").textContent=people.filter(x=>x.has_contact).length}
+function domains(){
+ const counts=new Map();for(const p of people){const key=(p.domain||"미분류").trim()||"미분류";counts.set(key,(counts.get(key)||0)+1)}
+ const ordered=[...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"ko"));
+ const max=Math.max(1,...ordered.map(x=>x[1]));const root=$("domainList");root.replaceChildren();
+ const all=make("button","domaincard"+(!domainFilter?" on":""));all.append(make("div","domainline","전체 분야 · "+people.length+"명"));
+ all.onclick=()=>{domainFilter="";domains();clearDetail();list()};root.append(all);
+ for(const [name,count] of ordered){const b=make("button","domaincard"+(domainFilter===name?" on":"")),line=make("div","domainline");
+ line.append(make("span","",name),make("span","domaincount",count+"명"));const bar=make("div","bar"),fill=make("span");fill.style.width=(count/max*100)+"%";bar.append(fill);b.append(line,bar);
+ b.onclick=()=>{domainFilter=domainFilter===name?"":name;domains();clearDetail();list()};root.append(b)}
+ $("domainCaption").textContent=ordered.length+"개 분야 · 분야 선택 시 목록 필터";
+}
 function list(){const term=$("search").value.trim().toLowerCase(),filtered=people.filter(p=>{
 if(metric==="core"&&p.priority!=="핵심")return false;if(metric==="contact"&&!p.has_contact)return false;
+if(domainFilter&&((p.domain||"미분류").trim()||"미분류")!==domainFilter)return false;
 return !term||[p.domain,p.name,p.org,p.headline].some(v=>(v||"").toLowerCase().includes(term))});
 $("counter").textContent=filtered.length+"명";const root=$("list");root.replaceChildren();if(!filtered.length){root.append(make("div","empty","해당 인재가 없습니다."));return}
 for(const p of filtered){const b=make("button","person"+(selected===p.id?" active":""));b.type="button";
-b.append(make("div","research",p.domain||"연구 분야 미등록"));const top=make("div","top");top.append(make("strong","",p.name||"성명 미등록"));
+const top=make("div","top");top.append(make("strong","",p.name||"성명 미등록"));
 const badge=make("span","pill "+(p.priority==="핵심"?"focus":p.priority==="미분류"?"muted":""),p.priority==="핵심"?"핵심":"관심");
 if(p.priority!=="핵심"&&p.priority!=="미분류"&&p.priority!=="높음"&&p.priority!=="보통"&&p.priority!=="낮음")badge.textContent="미분류";
 if(p.priority==="미분류")badge.textContent="미분류";
-top.append(badge);b.append(top,make("div","secondary",[p.org,p.headline].filter(Boolean).join(" · ")));
+top.append(badge);b.append(top);
+for(const [label,value] of [["소속",p.org],["직책",p.headline],["연구분야",p.domain]]){
+ const row=make("div","listline");row.append(make("b","",label+" : "),make("span","",value||"미등록"));b.append(row)
+}
 b.onclick=e=>{e.stopPropagation();choose(p.id)};root.append(b)}}
-function clearDetail(){selected=null;$("details").replaceChildren();$("details").classList.add("hidden");$("placeholder").classList.remove("hidden");$("closeDetail").classList.add("hidden");list()}
-async function choose(id){if(selected===id){clearDetail();return}selected=id;list();$("placeholder").classList.add("hidden");$("details").classList.remove("hidden");$("closeDetail").classList.remove("hidden");const root=$("details");root.replaceChildren();
+function clearDetail(){selected=null;editing=false;$("details").replaceChildren();$("workspace").classList.remove("expanded");$("closeDetail").classList.add("hidden");list()}
+async function choose(id,force=false){if(selected===id&&!force){clearDetail();return}selected=id;editing=false;list();$("workspace").classList.add("expanded");$("closeDetail").classList.remove("hidden");const root=$("details");root.replaceChildren();
 try{const t=await api("/api/talents/"+id);if(selected!==id)return;
 const head=make("div","detailhead");head.append(make("h2","",t.name));root.append(head);
 const grid=make("div","profilegrid"),input={};
 for(const [key,label,kind] of [["name","성명","input"],["org","소속","input"],["headline","직책","input"],["domain","연구 분야","input"],["summary","연구/경력 요약","textarea"],["why_fit","인재 적합성","textarea"],["email","이메일 주소","input"]]){
 const f=field(label,kind,t[key]);if(kind==="textarea")f.box.classList.add("full");if(key==="email")f.ctrl.type="email";grid.append(f.box);input[key]=f.ctrl}
-const src=make("details","section");const summary=make("summary","","출처 펼치기 · 수정");src.append(summary);
+const src=make("details","section");const summary=make("summary","","출처 보기");src.append(summary);
 const urls=field("공개 출처 URL (한 줄에 하나씩)","textarea",(t.sources||[]).join("\n"));urls.box.classList.add("full");urls.ctrl.classList.add("sourceslist");src.append(urls.box);
 const note=make("p","note","수정한 공개 프로필 정보는 이후 메일 재수신 시 유지됩니다.");src.append(note);root.append(grid,src);
-const section=make("div","section");section.append(make("h3","","사내 관리 정보"));const internal=make("div","profilegrid");
+const section=make("details","section");section.append(make("summary","","사내 관리 정보"));const internal=make("div","profilegrid");
 const status=field("관리 상태","select",t.status,["검토대기","검토중","관심","접촉예정","접촉중","보류","종료"]);
 const priority=field("관심도","select",t.priority,["미분류","핵심","높음","보통","낮음"]);
 const notes=field("내부 관리 메모","textarea",t.internal_notes);notes.box.classList.add("full");internal.append(status.box,priority.box,notes.box);section.append(internal);root.append(section);
-const actions=make("div","actions"),save=make("button","primary","변경 내용 저장"),message=make("span","message");actions.append(save,message);root.append(actions);
+const actions=make("div","actions"),edit=make("button","ghost","수정"),save=make("button","primary","저장"),cancelEdit=make("button","ghost","취소"),message=make("span","message");
+const editControls=[...Object.values(input),urls.ctrl,status.ctrl,priority.ctrl,notes.ctrl];
+function editMode(on){editing=on;editControls.forEach(c=>c.disabled=!on);edit.classList.toggle("hidden",on);save.classList.toggle("hidden",!on);cancelEdit.classList.toggle("hidden",!on);summary.textContent=on?"출처 펼치기 · 수정":"출처 보기"}
+edit.onclick=()=>editMode(true);cancelEdit.onclick=()=>choose(id,true);
+actions.append(edit,save,cancelEdit,message);root.append(actions);editMode(false);
 save.onclick=async()=>{save.disabled=true;message.textContent="";try{
 const changes={};for(const [key,ctrl] of Object.entries(input)){if(ctrl.value.trim()!==(t[key]||""))changes[key]=ctrl.value.trim()}
 const newSources=urls.ctrl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 if(JSON.stringify(newSources)!==JSON.stringify(t.sources||[]))changes.sources=newSources;
 changes.status=status.ctrl.value;changes.priority=priority.ctrl.value;changes.internal_notes=notes.ctrl.value;
 const res=await api("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify(changes)});
-message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name
+message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name;editMode(false)
 }catch(e){message.className="message error";message.textContent="저장 실패: "+e.message}finally{save.disabled=false}};
-const historySection=make("div","section");historySection.append(make("h3","","접촉 이력"));const history=make("div");const add=make("button","ghost","＋ 접촉 이력 추가");historySection.append(add,history);root.append(historySection);
+const historySection=make("details","section");historySection.append(make("summary","","접촉 이력"));const history=make("div");const add=make("button","ghost","＋ 접촉 이력 추가");historySection.append(add,history);root.append(historySection);
 const entry=make("div","profilegrid hidden"),day=field("접촉일","input",""),channel=field("접촉 방식","select","이메일",["이메일","전화","미팅","기타"]),subject=field("주제","input",""),memo=field("내용","textarea","");day.ctrl.type="date";day.ctrl.value=new Date().toLocaleDateString("sv-SE");memo.box.classList.add("full");entry.append(day.box,channel.box,subject.box,memo.box);
 const addActions=make("div","actions"),submit=make("button","primary","이력 저장"),cancel=make("button","ghost","취소"),notice=make("span","message");addActions.append(submit,cancel,notice);entry.append(addActions);historySection.insertBefore(entry,history);
 add.onclick=()=>{entry.classList.remove("hidden");add.classList.add("hidden")};cancel.onclick=()=>{entry.classList.add("hidden");add.classList.remove("hidden")};
@@ -116,9 +135,9 @@ async function loadHistory(){const d=await api("/api/talents/"+id+"/contacts");i
 submit.onclick=async()=>{submit.disabled=true;notice.textContent="";try{await api("/api/talents/"+id+"/contacts",{method:"POST",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify({contact_at:day.ctrl.value,channel:channel.ctrl.value,subject:subject.ctrl.value,memo:memo.ctrl.value})});await loadHistory();await loadList(false);entry.classList.add("hidden");add.classList.remove("hidden");subject.ctrl.value="";memo.ctrl.value=""}catch(e){notice.className="message error";notice.textContent=e.message}finally{submit.disabled=false}};
 await loadHistory();
 }catch(e){root.replaceChildren(make("p","message error","상세 정보를 불러오지 못했습니다."))}}
-async function loadList(reset=true){try{const d=await api("/api/talents?limit=500");people=d.items;stats();if(reset&&selected&&!people.some(x=>x.id===selected))clearDetail();list()}catch(e){$("list").replaceChildren(make("div","empty","목록 조회에 실패했습니다."))}}
-$("closeDetail").onclick=clearDetail;$("search").oninput=list;$("reset").onclick=()=>{$("search").value="";metric="all";document.querySelectorAll(".metric").forEach(b=>b.classList.toggle("on",b.dataset.metric==="all"));list()};
+async function loadList(reset=true){try{const d=await api("/api/talents?limit=500");people=d.items;stats();if(reset&&selected&&!people.some(x=>x.id===selected))clearDetail();domains();list()}catch(e){$("list").replaceChildren(make("div","empty","목록 조회에 실패했습니다."))}}
+$("closeDetail").onclick=clearDetail;$("search").oninput=list;$("reset").onclick=()=>{$("search").value="";metric="all";domainFilter="";domains();clearDetail();document.querySelectorAll(".metric").forEach(b=>b.classList.toggle("on",b.dataset.metric==="all"));list()};
 document.querySelectorAll(".metric").forEach(b=>b.onclick=()=>{metric=b.dataset.metric;document.querySelectorAll(".metric").forEach(m=>m.classList.toggle("on",m===b));if(selected&&((metric==="core"&&people.find(p=>p.id===selected)?.priority!=="핵심")||(metric==="contact"&&!people.find(p=>p.id===selected)?.has_contact)))clearDetail();list()});
-document.addEventListener("click",e=>{if(selected&&(e.target===$("details")||e.target===$("detailPanel")||!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar")))clearDetail()});
+document.addEventListener("click",e=>{if(selected&&!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar,.domains"))clearDetail()});
 loadList();
 </script></body></html>

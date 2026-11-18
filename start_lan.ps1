@@ -1,47 +1,37 @@
-# Start the internal Talent Pool using this PC's actual LAN IPv4 address.
-# Do not use on public networks. Remote clients must be explicitly approved by IT.
+# Launch Talent Pool on this PC's actual private IPv4.
+# All clients on routed private networks can connect if company firewall permits.
+# LAN testing only. No NAT forwarding, public tunnels, or unapproved networks.
 param(
     [string]$ServerIP = "",
-    [string[]]$AllowedClientIPs = @(),
     [int]$Port = 8090
 )
 $ErrorActionPreference = "Stop"
-
 function Test-PrivateIPv4([string]$Address) {
     $parsed = $null
     if (-not [System.Net.IPAddress]::TryParse($Address, [ref]$parsed)) { return $false }
     if ($parsed.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
-    $octets = $parsed.GetAddressBytes()
-    return ($octets[0] -eq 10) -or ($octets[0] -eq 172 -and $octets[1] -ge 16 -and $octets[1] -le 31) -or ($octets[0] -eq 192 -and $octets[1] -eq 168)
+    $o = $parsed.GetAddressBytes()
+    return ($o[0] -eq 10) -or ($o[0] -eq 172 -and $o[1] -ge 16 -and $o[1] -le 31) -or ($o[0] -eq 192 -and $o[1] -eq 168)
 }
-
 if (-not $ServerIP) {
     $candidates = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
         Where-Object { $_.AddressState -eq "Preferred" -and (Test-PrivateIPv4 $_.IPAddress) } |
         Select-Object -ExpandProperty IPAddress -Unique)
     if ($candidates.Count -ne 1) {
-        Write-Host "Unable to choose a single LAN address. Candidates: $($candidates -join ', ')" -ForegroundColor Yellow
-        throw "Pass -ServerIP with your approved server PC private IPv4 address (see ipconfig)."
+        Write-Host "Multiple/no private IPv4 adapters: $($candidates -join ', ')" -ForegroundColor Yellow
+        throw "Use .\start_lan.ps1 -ServerIP 'your actual private IPv4' (see ipconfig)"
     }
     $ServerIP = $candidates[0]
 }
 if (-not (Test-PrivateIPv4 $ServerIP)) {
-    throw "ServerIP must be a private IPv4 address (10.x, 172.16-31.x, 192.168.x)."
+    throw "ServerIP must be a local private IPv4."
 }
-$allowed = @($ServerIP)
-foreach ($address in $AllowedClientIPs) {
-    if (-not (Test-PrivateIPv4 $address)) {
-        throw "Only approved private IPv4 client addresses are supported: $address"
-    }
-    $allowed += $address
-}
-$env:INTERNAL_ALLOWED_CIDRS = (($allowed | Select-Object -Unique | ForEach-Object { "$($_)/32" }) -join ",")
-Write-Host "Local Talent Pool URL: http://$($ServerIP):$Port" -ForegroundColor Green
-if ($AllowedClientIPs.Count -eq 0) {
-    Write-Host "Local-server-only access. To add another approved PC: .\start_lan.ps1 -AllowedClientIPs '10.1.2.3'"
-} else {
-    Write-Host "Approved remote client IP(s): $($AllowedClientIPs -join ', ')"
-    Write-Host "IT-approved Windows Firewall TCP port $Port source-IP restriction is still required." -ForegroundColor Yellow
-}
-Write-Host "Use this URL from an approved client: http://$($ServerIP):$Port" -ForegroundColor Cyan
+if ($Port -lt 1024 -or $Port -gt 65535) { throw "Choose a TCP port between 1024 and 65535" }
+$env:TALENTPOOL_LAN_SHARE = "1"
+Write-Host ""
+Write-Host "Talent Pool LAN URL: http://$($ServerIP):$Port" -ForegroundColor Green
+Write-Host "Share this address only with approved internal coworkers."
+Write-Host "No app password. Everyone who can reach the port from a private IPv4 can view/edit/delete data." -ForegroundColor Yellow
+Write-Host "Windows Firewall or corporate network rules must permit inbound TCP $Port. This script does not modify firewall." -ForegroundColor Yellow
+Write-Host ""
 python -m uvicorn viewer:app --host $ServerIP --port $Port --no-proxy-headers

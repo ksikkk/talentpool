@@ -4,12 +4,39 @@ Use python app.py. Never sends internal data outside this PC.
 Company firewall and networking still determine who can connect.
 """
 import os
+import json
 import socket
+from pathlib import Path
 import subprocess
 import sys
 from ipaddress import IPv4Address
 
 PORT = 8090
+
+def load_mail_settings():
+    path=Path(__file__).with_name("mail_credentials.local.json")
+    if not path.exists():
+        return False
+    # Passwords are decrypted in a child PowerShell process under the same
+    # Windows login. They are never printed to this console or stored in Git.
+    try:
+        p=subprocess.run(
+            ["powershell.exe","-NoProfile","-NonInteractive","-File",
+             str(Path(__file__).with_name("load_mail.ps1"))],
+            capture_output=True,text=True,encoding="utf-8-sig",timeout=20
+        )
+        if p.returncode:
+            print("Local mail credentials could not be opened. Re-run setup_mail.ps1 under this Windows account.")
+            return False
+        values=json.loads(p.stdout.strip())
+        for key in ("POP3_USER","POP3_PASSWORD","TRUSTED_SENDER","POP3_HOST","HANDOFF_SECRET"):
+            if key not in os.environ and values.get(key):
+                os.environ[key]=values[key]
+        return True
+    except (OSError,ValueError,subprocess.TimeoutExpired):
+        print("Local mail settings could not be loaded.")
+        return False
+
 
 
 def network_addresses():
@@ -40,6 +67,10 @@ def main():
     print("Talent Pool | Intranet Shared Management", flush=True)
     print("=" * 58, flush=True)
     os.environ["TALENTPOOL_SHARE_EDIT"] = "1"
+    if load_mail_settings():
+        print("Automatic POP3 import configured for this Windows user.",flush=True)
+    else:
+        print("Automatic POP3 import requires one-time setup_mail.ps1 or existing environment variables.",flush=True)
     print(f"\nMy PC: http://127.0.0.1:{PORT}", flush=True)
     addresses = network_addresses()
     for address in addresses:

@@ -1,11 +1,48 @@
 """Private, local-only dashboard and CRUD API. No outbound requests."""
-import os, ipaddress, socket
+import os, ipaddress, socket, threading, time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, HTTPException, Body, Query
 from fastapi.responses import HTMLResponse
 from management import database, list_talents, get_talent, edit_talent, add_contact, contacts, delete_talent
 
-app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool")
+_mail_state={"enabled":False,"last_poll":None,"last_counts":None,"last_error":None}
+
+@asynccontextmanager
+async def lifespan(application):
+    stop=threading.Event()
+    required=("POP3_USER","POP3_PASSWORD","TRUSTED_SENDER","HANDOFF_SECRET")
+    configured=all(os.getenv(k) for k in required)
+    _mail_state["enabled"]=configured
+    if not configured:
+        print("[Talent Pool] Automatic mail import disabled: set POP3_USER, POP3_PASSWORD, TRUSTED_SENDER and HANDOFF_SECRET locally.")
+    def loop():
+        from datetime import datetime, timezone
+        from receiver import poll_once
+        interval=max(60,int(os.getenv("POP3_POLL_SECONDS","300")))
+        while not stop.is_set():
+            try:
+                summary=poll_once()
+                _mail_state.update(last_poll=datetime.now(timezone.utc).isoformat(),
+                                   last_counts=summary,last_error=None)
+                print("[Talent Pool] Auto mail import: "+
+                      str(summary.get("imported",0))+" imported, "+
+                      str(summary.get("duplicate",0))+" duplicate.")
+            except Exception as exc:
+                _mail_state["last_error"]=type(exc).__name__
+                print("[Talent Pool] Auto mail import failed: "+type(exc).__name__)
+            if stop.wait(interval): break
+    worker=None
+    if configured:
+        worker=threading.Thread(target=loop,daemon=True,name="talentpool-mail-poller")
+        worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        if worker: worker.join(timeout=3)
+
+app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool",lifespan=lifespan)
 
 def _local_bindable_addresses():
     """People-style local address check, no external lookup or data transfer."""
@@ -148,3 +185,7 @@ def monthly_reviews(_=Depends(guard)):
 @app.get("/monthly-reviews",response_class=HTMLResponse)
 def monthly_review_page(_=Depends(guard)):
     return Path(__file__).with_name("monthly_reviews.html").read_text(encoding="utf-8")
+
+@app.get("/api/mail-status")
+def mail_status(_=Depends(guard)):
+    return dict(_mail_state)

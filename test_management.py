@@ -31,8 +31,9 @@ class ManagementTests(unittest.TestCase):
 
     def test_edit_and_filter(self):
         db=database()
-        result=edit_talent(db,1,{"status":"접촉예정","priority":"핵심","owner":"채용 담당","internal_notes":"내부 검토","next_action":"후속 연락","next_action_date":"2026-12-01"})
+        result=edit_talent(db,1,{"status":"접촉예정","priority":"핵심","email":"candidate@example.org","internal_notes":"내부 검토"})
         self.assertEqual(result["priority"],"핵심")
+        self.assertEqual(result["email"],"candidate@example.org")
         self.assertEqual(len(list_talents(db,status="접촉예정",priority="핵심")),1)
         with self.assertRaises(ValueError):
             edit_talent(db,1,{"name":"변경 불가"})
@@ -43,6 +44,23 @@ class ManagementTests(unittest.TestCase):
         added=add_contact(db,1,"이메일","가상 안내","연락 내용","2026-11-18")
         self.assertIsInstance(added,int)
         self.assertEqual(contacts(db,1)[0]["subject"],"가상 안내")
+        self.assertTrue(get_talent(db,1)["has_contact"])
+        self.assertEqual(len([t for t in list_talents(db) if t["has_contact"]]),1)
+        db.close()
+
+    def test_manual_profile_edit_survives_reimport(self):
+        from receiver import import_mail
+        from test_receiver import sample_mail, SECRET, SENDER
+        db=database()
+        self.assertEqual(import_mail(db,sample_mail(),SECRET,SENDER),"imported")
+        imported=db.execute("SELECT id FROM talent WHERE name=?",("테스트 인재",)).fetchone()["id"]
+        edit_talent(db,imported,{"headline":"검증한 직책","summary":"수동 보완","sources":["https://example.org/new"],"email":"contact@example.org"})
+        self.assertEqual(import_mail(db,sample_mail(batch="b"*32),SECRET,SENDER),"imported")
+        result=get_talent(db,imported)
+        self.assertEqual(result["headline"],"검증한 직책")
+        self.assertEqual(result["summary"],"수동 보완")
+        self.assertEqual(result["sources"],["https://example.org/new"])
+        self.assertEqual(result["email"],"contact@example.org")
         db.close()
 
     def test_mail_import_keeps_internal_notes(self):

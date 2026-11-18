@@ -7,21 +7,23 @@ from management import database, list_talents, get_talent, edit_talent, add_cont
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool")
 
+LAN_NETS = tuple(ipaddress.ip_network(n) for n in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
+))
+
 def guard(request: Request):
-    """No application password. Restrict by direct TCP source IP, fail closed by default."""
+    """No app login; explicit LAN sharing only. Never permit public clients."""
     ip = request.client.host if request.client else ""
     try:
-        peer=ipaddress.ip_address(ip)
-        configured=os.getenv("INTERNAL_ALLOWED_CIDRS","").strip()
-        networks=[ipaddress.ip_network(x.strip(),strict=False)
-                  for x in configured.split(",") if x.strip()]
-        # Deny public or overly broad network configuration.
-        networks=[net for net in networks if net.is_private and net.prefixlen >= (16 if net.version==4 else 64)]
-        if peer.is_loopback or any(peer in network for network in networks):
+        peer = ipaddress.ip_address(ip)
+        if peer.is_loopback:
+            return True
+        if os.getenv("TALENTPOOL_LAN_SHARE") == "1" and any(peer in n for n in LAN_NETS):
             return True
     except ValueError:
         pass
-    raise HTTPException(403,"This device is not in the approved internal network")
+    raise HTTPException(403, "Access restricted to internal private-network clients")
+
 
 def write_guard(request:Request, _=Depends(guard)):
     if request.headers.get("X-Internal-Action")!="1":

@@ -1,25 +1,25 @@
 """Private, local-only dashboard and CRUD API. No outbound requests."""
-import os, base64, hmac
+import os, ipaddress
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, HTTPException, Body, Query
 from fastapi.responses import HTMLResponse
-from management import database, list_talents, get_talent, edit_talent, add_contact, contacts
+from management import database, list_talents, get_talent, edit_talent, add_contact, contacts, delete_talent
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool")
 
 def guard(request: Request):
-    password=os.getenv("INTERNAL_VIEW_PASSWORD")
-    if not password:
-        raise HTTPException(503, "INTERNAL_VIEW_PASSWORD is required")
+    """No application password. Restrict by direct TCP source IP, fail closed by default."""
+    ip = request.client.host if request.client else ""
     try:
-        scheme, token=request.headers.get("authorization","").split(" ",1)
-        if scheme.lower()!="basic": raise ValueError()
-        decoded=base64.b64decode(token,validate=True).decode("utf-8")
-        username,provided=decoded.split(":",1)
-        if username and hmac.compare_digest(provided,password): return username
-    except (ValueError, UnicodeError, IndexError):
+        peer=ipaddress.ip_address(ip)
+        configured=os.getenv("INTERNAL_ALLOWED_CIDRS","").strip()
+        networks=[ipaddress.ip_network(x.strip(),strict=False)
+                  for x in configured.split(",") if x.strip()]
+        if peer.is_loopback or any(peer in network for network in networks):
+            return True
+    except ValueError:
         pass
-    raise HTTPException(401,"Login required",headers={"WWW-Authenticate":'Basic realm="Internal Talent Pool"'})
+    raise HTTPException(403,"This device is not in the approved internal network")
 
 def write_guard(request:Request, _=Depends(guard)):
     if request.headers.get("X-Internal-Action")!="1":
@@ -83,4 +83,13 @@ def create_contact(talent_id:int, entry:dict=Body(...),_=Depends(write_guard)):
         except (ValueError,TypeError): raise HTTPException(422,"Invalid contact values")
         if new_id is None: raise HTTPException(404,"Talent not found")
         return {"id":new_id}
+    finally: db.close()
+
+@app.delete("/api/talents/{talent_id}")
+def delete_candidate(talent_id:int,_=Depends(write_guard)):
+    db=database()
+    try:
+        if not delete_talent(db,talent_id):
+            raise HTTPException(404,"Talent not found")
+        return {"deleted":True}
     finally: db.close()

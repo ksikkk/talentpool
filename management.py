@@ -20,6 +20,8 @@ def database():
         ("priority", "TEXT NOT NULL DEFAULT '미분류'"),
         ("email", "TEXT NOT NULL DEFAULT ''"),
         ("email_source", "TEXT NOT NULL DEFAULT ''"),
+        ("classification", "TEXT NOT NULL DEFAULT ''"),
+        ("deleted_at", "TEXT"),
         ("requested_field", "TEXT NOT NULL DEFAULT ''"),
         ("edited_fields_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("owner", "TEXT NOT NULL DEFAULT ''"),
@@ -57,6 +59,7 @@ def talent_as_dict(row):
 
 def list_talents(db, q="", status="", priority="", domain="", limit=200):
     where, params = [], []
+    where.append("talent.deleted_at IS NULL")
     if q:
         where.append("(name LIKE ? OR org LIKE ? OR headline LIKE ? OR domain LIKE ?)")
         params += ["%" + q[:100] + "%"] * 4
@@ -73,14 +76,14 @@ def list_talents(db, q="", status="", priority="", domain="", limit=200):
     return [talent_as_dict(r) for r in db.execute(statement, params).fetchall()]
 
 def get_talent(db, talent_id):
-    row = db.execute("""SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count, (SELECT json_group_array(field) FROM talent_field tf WHERE tf.talent_id=talent.id) AS field_groups_json FROM talent WHERE talent.id=?""", (talent_id,)).fetchone()
+    row = db.execute("""SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count, (SELECT json_group_array(field) FROM talent_field tf WHERE tf.talent_id=talent.id) AS field_groups_json FROM talent WHERE talent.id=? AND talent.deleted_at IS NULL""", (talent_id,)).fetchone()
     return talent_as_dict(row) if row else None
 
 def edit_talent(db, talent_id, updates):
     import re
     from receiver import valid_url
     allowed = {"status", "priority", "internal_notes", "name", "org", "headline",
-               "domain", "summary", "why_fit", "email", "sources", "requested_field"}
+               "domain", "summary", "why_fit", "email", "sources", "requested_field", "classification"}
     if not updates or any(k not in allowed for k in updates):
         raise ValueError("invalid update fields")
     for k,v in updates.items():
@@ -128,3 +131,11 @@ def add_contact(db,talent_id,channel,subject,memo,contact_at):
 def contacts(db,talent_id):
     return [dict(r) for r in db.execute(
         "SELECT * FROM contact_history WHERE talent_id=? ORDER BY contact_at DESC,id DESC LIMIT 300",(talent_id,))]
+
+def delete_talent(db, talent_id):
+    """Recoverable soft deletion, retaining history for authorized recovery."""
+    if not get_talent(db,talent_id):
+        return False
+    with db:
+        db.execute("UPDATE talent SET deleted_at=? WHERE id=? AND deleted_at IS NULL",(now(),talent_id))
+    return True

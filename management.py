@@ -18,6 +18,8 @@ def database():
     columns = {r["name"] for r in db.execute("PRAGMA table_info(talent)")}
     for key, definition in (
         ("priority", "TEXT NOT NULL DEFAULT '미분류'"),
+        ("email", "TEXT NOT NULL DEFAULT ''"),
+        ("edited_fields_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("owner", "TEXT NOT NULL DEFAULT ''"),
         ("internal_notes", "TEXT NOT NULL DEFAULT ''"),
         ("next_action", "TEXT NOT NULL DEFAULT ''"),
@@ -41,6 +43,7 @@ def database():
 def talent_as_dict(row):
     item = dict(row)
     item["sources"] = json.loads(item.pop("sources_json"))
+    item["has_contact"] = bool(item.get("contact_count", 0))
     return item
 
 def list_talents(db, q="", status="", priority="", domain="", limit=200):
@@ -54,34 +57,45 @@ def list_talents(db, q="", status="", priority="", domain="", limit=200):
         where.append("priority=?"); params.append(priority)
     if domain:
         where.append("domain LIKE ?"); params.append("%" + domain[:100] + "%")
-    statement = "SELECT * FROM talent"
+    statement = """SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count FROM talent"""
     if where: statement += " WHERE " + " AND ".join(where)
     statement += " ORDER BY updated_at DESC,id DESC LIMIT ?"
     params.append(min(max(int(limit),1),500))
     return [talent_as_dict(r) for r in db.execute(statement, params).fetchall()]
 
 def get_talent(db, talent_id):
-    row = db.execute("SELECT * FROM talent WHERE id=?", (talent_id,)).fetchone()
+    row = db.execute("""SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count FROM talent WHERE talent.id=?""", (talent_id,)).fetchone()
     return talent_as_dict(row) if row else None
 
 def edit_talent(db, talent_id, updates):
-    allowed = {"status", "priority", "owner", "internal_notes", "next_action", "next_action_date"}
+    import re
+    from receiver import valid_url
+    allowed = {"status", "priority", "internal_notes", "name", "org", "headline",
+               "domain", "summary", "why_fit", "email", "sources"}
     if not updates or any(k not in allowed for k in updates):
         raise ValueError("invalid update fields")
     for k,v in updates.items():
-        if not isinstance(v,str) or len(v) > (4000 if k=="internal_notes" else 200):
+        if k == "sources":
+            if not isinstance(v,list) or len(v)>20 or not all(isinstance(u,str) and len(u)<=1500 and valid_url(u) for u in v):
+                raise ValueError("invalid sources")
+        elif not isinstance(v,str) or len(v) > (4000 if k in {"internal_notes","summary","why_fit"} else 300):
             raise ValueError("invalid field value")
-        if k=="status" and v not in STATUSES: raise ValueError("invalid status")
-        if k=="priority" and v not in PRIORITIES: raise ValueError("invalid priority")
-        if k=="next_action_date" and v:
-            from datetime import date
-            try:
-                if date.fromisoformat(v).isoformat()!=v: raise ValueError()
-            except ValueError: raise ValueError("invalid date")
-    if not get_talent(db,talent_id): return None
-    fields = ", ".join(k+"=?" for k in updates)
+        elif k=="status" and v not in STATUSES: raise ValueError("invalid status")
+        elif k=="priority" and v not in PRIORITIES: raise ValueError("invalid priority")
+        elif k in {"name","org"} and not v.strip(): raise ValueError("name and organization required")
+        elif k=="email" and v and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+",v):
+            raise ValueError("invalid email")
+    existing=get_talent(db,talent_id)
+    if not existing: return None
+    converted={("sources_json" if k=="sources" else k):
+        (json.dumps(v,ensure_ascii=False) if k=="sources" else v) for k,v in updates.items()}
+    curated={"name","org","headline","domain","summary","why_fit","sources"}
+    edited=set(json.loads(existing.get("edited_fields_json") or "[]"))
+    edited.update(curated.intersection(updates))
+    converted["edited_fields_json"]=json.dumps(sorted(edited),ensure_ascii=False)
+    fields=", ".join(k+"=?" for k in converted)
     with db:
-        db.execute("UPDATE talent SET "+fields+" WHERE id=?", [*updates.values(),talent_id])
+        db.execute("UPDATE talent SET "+fields+" WHERE id=?", [*converted.values(),talent_id])
     return get_talent(db,talent_id)
 
 def add_contact(db,talent_id,channel,subject,memo,contact_at):

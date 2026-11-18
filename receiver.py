@@ -3,7 +3,7 @@ import argparse, hashlib, hmac, json, os, poplib, re, sqlite3, ssl, sys
 from datetime import datetime, timezone
 from email import policy
 from email.parser import BytesParser
-from email.utils import parseaddr
+from email.utils import parseaddr, getaddresses
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -41,7 +41,9 @@ def parse_mail(raw, secret, trusted_sender):
     msg=BytesParser(policy=policy.default).parsebytes(raw)
     subject=msg.get("Subject","")
     if not subject.startswith("[TALENTPOOL-IMPORT] "): return None
-    if msg.get("To","").lower().strip()!="jobinfo@samsung.com": raise ValueError("unexpected recipient")
+    # Mail gateways may add a display name or additional recipients.
+    recipients={addr.lower() for _,addr in getaddresses(msg.get_all("To",[]) + msg.get_all("Cc",[]))}
+    if "jobinfo@samsung.com" not in recipients: raise ValueError("unexpected recipient")
     if parseaddr(msg.get("From",""))[1].lower()!=trusted_sender.lower(): raise ValueError("unexpected sender")
     part=msg.get_body(preferencelist=("plain",))
     if part is None or part.get_content_type()!="text/plain": raise ValueError("missing JSON text")
@@ -110,7 +112,13 @@ def poll_once():
                 result[status]+=1
             except Exception as exc:
                 result["rejected"]+=1
-                print("Rejected message #"+str(n)+": "+type(exc).__name__,file=sys.stderr)
+                # Only fixed validation reason codes are logged: never headers, JSON, passwords, or candidate data.
+                allowed={"oversize message","unexpected recipient","unexpected sender","missing JSON text",
+                         "invalid marker","invalid HMAC signature","invalid schema","invalid batch ID",
+                         "invalid talent list","unexpected talent fields","invalid person field",
+                         "missing name or organization","invalid sources"}
+                reason=str(exc) if isinstance(exc,ValueError) and str(exc) in allowed else type(exc).__name__
+                print(f"Rejected message #{n}: {reason}",file=sys.stderr)
     finally:
         server.quit();db.close()
     return result

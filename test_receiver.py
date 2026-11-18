@@ -54,6 +54,20 @@ class ReceiverTests(unittest.TestCase):
             self.assertEqual(import_mail(db,msg.as_bytes(),SECRET,SENDER),"imported")
             db.close()
 
+    def test_signed_json_attachment(self):
+        from email import policy
+        from email.parser import BytesParser
+        msg=BytesParser(policy=policy.default).parsebytes(sample_mail())
+        body=msg.get_body(preferencelist=("plain",)).get_content()
+        signed_json=body.split("\n",1)[1].strip()
+        msg.add_attachment(signed_json.encode("utf-8"),maintype="application",subtype="json",filename="talentpool.json")
+        # Deliberately alter the legacy body: attachment must remain signed.
+        msg.get_body(preferencelist=("plain",)).set_content("Corporate banner replaced body")
+        with tempfile.TemporaryDirectory() as folder:
+            db=connect_db(Path(folder)/"pool.db")
+            self.assertEqual(import_mail(db,msg.as_bytes(),SECRET,SENDER),"imported")
+            db.close()
+
     def test_invalid_signature_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             db=connect_db(Path(folder)/"pool.db")

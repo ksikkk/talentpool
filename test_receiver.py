@@ -12,7 +12,7 @@ from receiver import connect_db, import_mail
 SECRET = "internal_test_secret_123456789012"
 SENDER = "approved@example.com"
 
-def sample_mail(batch="a" * 32, valid=True):
+def sample_mail(batch="a" * 32, valid=True, with_discovery=False, field="HBM"):
     p = {
         "schema_version": 2,
         "kind": "talentpool_handoff",
@@ -25,6 +25,12 @@ def sample_mail(batch="a" * 32, valid=True):
             "why_fit": "공식 출처", "sources": ["https://example.org/profile"]
         }]
     }
+    if with_discovery:
+        p["talents"][0].update({
+            "requested_field":field,
+            "email":"researcher@example.org",
+            "email_source":"https://example.org/profile"
+        })
     raw = json.dumps(p, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     msg = EmailMessage()
     msg["From"] = SENDER
@@ -66,6 +72,21 @@ class ReceiverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             db=connect_db(Path(folder)/"pool.db")
             self.assertEqual(import_mail(db,msg.as_bytes(),SECRET,SENDER),"imported")
+            db.close()
+
+    def test_discovery_fields_and_email_import(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db=connect_db(Path(folder)/"pool.db")
+            self.assertEqual(import_mail(db,sample_mail(with_discovery=True),SECRET,SENDER),"imported")
+            row=db.execute("SELECT id,requested_field,email,email_source FROM talent").fetchone()
+            self.assertEqual(row["requested_field"],"HBM")
+            self.assertEqual(row["email"],"researcher@example.org")
+            self.assertEqual(row["email_source"],"https://example.org/profile")
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM talent_field").fetchone()[0],1)
+            # A second valid request for the same person is an additional grouping, not a duplicate person.
+            self.assertEqual(import_mail(db,sample_mail(batch="b"*32,with_discovery=True,field="첨단 패키징"),SECRET,SENDER),"imported")
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM talent").fetchone()[0],1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM talent_field").fetchone()[0],2)
             db.close()
 
     def test_invalid_signature_rejected(self):

@@ -1,5 +1,5 @@
 """Private, local-only dashboard and CRUD API. No outbound requests."""
-import os, ipaddress
+import os, ipaddress, socket
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, HTTPException, Body, Query
 from fastapi.responses import HTMLResponse
@@ -7,22 +7,46 @@ from management import database, list_talents, get_talent, edit_talent, add_cont
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool")
 
-def guard(request: Request):
-    """Localhost or explicitly launched same-subnet LAN sharing; fail closed."""
-    ip = request.client.host if request.client else ""
+def _local_bindable_addresses():
+    """People-style local address check, no external lookup or data transfer."""
     try:
-        peer = ipaddress.ip_address(ip)
-        if peer.is_loopback:
-            return True
-        network_text = os.getenv("TALENTPOOL_SHARE_SUBNET", "").strip()
-        if network_text:
-            subnet = ipaddress.ip_network(network_text, strict=False)
-            # Only an IPv4, reasonably narrow network; no blanket internet range.
-            if subnet.version == 4 and subnet.prefixlen >= 24 and peer in subnet:
-                return True
+        records=socket.getaddrinfo(socket.gethostname(),None,socket.AF_INET,socket.SOCK_STREAM)
+    except OSError:
+        return set()
+    addresses=set()
+    for record in records:
+        address=record[4][0]
+        try:
+            with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as probe:
+                probe.bind((address,0))
+            addresses.add(address)
+        except OSError:
+            pass
+    return addresses
+
+
+def guard(request: Request):
+    """Shared intranet mode, same-origin and actual local Host check."""
+    try:
+        peer=ipaddress.ip_address(request.client.host if request.client else "")
     except ValueError:
-        pass
-    raise HTTPException(403, "Access restricted to the selected local subnet")
+        raise HTTPException(403,"Invalid client")
+    if peer.is_loopback:
+        return True
+    if os.getenv("TALENTPOOL_SHARE_EDIT") != "1":
+        raise HTTPException(403,"Shared mode is disabled")
+    host=request.headers.get("host","")
+    if len(request.headers.getlist("host")) != 1:
+        raise HTTPException(403,"Invalid Host header")
+    expected={f"{a}:8090" for a in _local_bindable_addresses()}
+    if host not in expected:
+        raise HTTPException(403,"Use this PC's actual IPv4 address and port")
+    origin=request.headers.get("origin")
+    if origin and origin != f"http://{host}":
+        raise HTTPException(403,"Origin mismatch")
+    if request.headers.get("sec-fetch-site")=="cross-site":
+        raise HTTPException(403,"Cross-site requests not accepted")
+    return True
 
 
 def write_guard(request:Request, _=Depends(guard)):

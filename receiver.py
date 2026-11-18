@@ -45,12 +45,21 @@ def parse_mail(raw, secret, trusted_sender):
     recipients={addr.lower() for _,addr in getaddresses(msg.get_all("To",[]) + msg.get_all("Cc",[]))}
     if "jobinfo@samsung.com" not in recipients: raise ValueError("unexpected recipient")
     if parseaddr(msg.get("From",""))[1].lower()!=trusted_sender.lower(): raise ValueError("unexpected sender")
-    part=msg.get_body(preferencelist=("plain",))
-    if part is None or part.get_content_type()!="text/plain": raise ValueError("missing JSON text")
-    body=part.get_content()
-    prefix="TALENTPOOL_JSON_V2\n"
-    if not body.startswith(prefix): raise ValueError("invalid marker")
-    raw_json=body[len(prefix):].strip()
+    # Prefer the signed JSON attachment: mail gateways often modify plain-text
+    # bodies (security banners, line wrapping), but preserve attachments.
+    attachments=[p for p in msg.walk() if p.get_filename()=="talentpool.json" and p.get_content_type()=="application/json"]
+    if len(attachments)>1: raise ValueError("multiple JSON attachments")
+    if attachments:
+        raw_bytes=attachments[0].get_payload(decode=True)
+        if not raw_bytes or len(raw_bytes)>512*1024: raise ValueError("invalid JSON attachment")
+        raw_json=raw_bytes.decode("utf-8")
+    else:
+        part=msg.get_body(preferencelist=("plain",))
+        if part is None or part.get_content_type()!="text/plain": raise ValueError("missing JSON text")
+        body=part.get_content()
+        prefix="TALENTPOOL_JSON_V2\n"
+        if not body.startswith(prefix): raise ValueError("invalid marker")
+        raw_json=body[len(prefix):].strip()
     # Require strict JSON; never deserialize arbitrary data or accept unsigned content.
     payload=json.loads(raw_json)
     signature=msg.get("X-Talentpool-Signature","").strip()
@@ -123,7 +132,7 @@ def poll_once():
                 result["rejected"]+=1
                 # Only fixed validation reason codes are logged: never headers, JSON, passwords, or candidate data.
                 allowed={"oversize message","unexpected recipient","unexpected sender","missing JSON text",
-                         "invalid marker","invalid HMAC signature","invalid schema","invalid batch ID",
+                         "invalid marker","invalid JSON attachment","multiple JSON attachments","invalid HMAC signature","invalid schema","invalid batch ID",
                          "invalid talent list","unexpected talent fields","invalid person field",
                          "missing name or organization","invalid sources"}
                 reason=str(exc) if isinstance(exc,ValueError) and str(exc) in allowed else type(exc).__name__

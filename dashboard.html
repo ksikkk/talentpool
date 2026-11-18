@@ -53,6 +53,15 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 .sourceslist{white-space:pre-wrap;word-break:break-all;min-height:76px}.empty{padding:30px;text-align:center;color:#7a8ca1}
 @media(max-width:950px){.workspace.expanded{grid-template-columns:1fr}.list{max-height:350px}}
 @media(max-width:560px){main{padding:16px 12px}.metrics{gap:8px}.metric{padding:12px}.metric .num{font-size:24px}.profilegrid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}header{padding:16px}}
+
+#details:not(.is-editing) .display-control input,
+#details:not(.is-editing) .display-control textarea,
+#details:not(.is-editing) .display-control select{display:none}
+#details.is-editing .display-control .plain-value{display:none}
+.plain-value{font-weight:520;color:#1c2b42;white-space:pre-wrap;overflow-wrap:anywhere;min-height:27px;padding:5px 0}
+.profile-buttons{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+button.danger{background:#fff2f2;border:1px solid #f0c9c9;color:#a22929;border-radius:9px;padding:9px 13px}
+.field label{margin-bottom:2px}
 </style></head><body>
 <header><h1>인재 Pool 관리</h1><span class="caption">Talent Management</span></header>
 <main><div class="metrics">
@@ -64,7 +73,7 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 <div class="toolbar"><input id="search" placeholder="연구 분야 · 성명 · 소속 검색"><button id="reset" class="ghost">검색 초기화</button></div>
 <div class="workspace" id="workspace">
 <section class="panel"><div class="panelhead"><h2>인재 목록</h2><span class="caption" id="counter"></span></div><div id="list" class="list"></div></section>
-<section class="panel" id="detailPanel"><div class="panelhead"><h2>인재 상세 및 관리</h2><button id="closeDetail" class="ghost hidden">닫기 ×</button></div>
+<section class="panel" id="detailPanel"><div class="panelhead"><h2>인재 상세 및 관리</h2><div class="profile-buttons" id="profileButtons"><button id="closeDetail" class="ghost hidden">닫기 ×</button></div></div>
 <div id="details" class="detail"></div></section>
 </div></main>
 <script>
@@ -108,27 +117,33 @@ async function choose(id,force=false){if(selected===id&&!force){clearDetail();re
 try{const t=await api("/api/talents/"+id);if(selected!==id)return;
 const head=make("div","detailhead");head.append(make("h2","",t.name));root.append(head);
 const grid=make("div","profilegrid"),input={};
-for(const [key,label,kind] of [["name","성명","input"],["org","소속","input"],["headline","직책","input"],["domain","연구 분야","input"],["summary","연구/경력 요약","textarea"],["why_fit","인재 적합성","textarea"],["email","이메일 주소","input"]]){
-const f=field(label,kind,t[key]);if(kind==="textarea")f.box.classList.add("full");if(key==="email")f.ctrl.type="email";grid.append(f.box);input[key]=f.ctrl}
+const editFields=[];
+function profileField(f,value){f.box.classList.add("display-control");const view=make("div","plain-value",value||"—");f.box.append(view);editFields.push({ctrl:f.ctrl,view});return f}
+
+for(const [key,label,kind] of [["name","성명","input"],["org","소속","input"],["headline","직책","input"],["classification","분류","input"],["domain","연구 분야","input"],["summary","연구/경력 요약","textarea"],["why_fit","인재 적합성","textarea"],["email","이메일 주소","input"]]){
+const f=profileField(field(label,kind,t[key]),t[key]);if(kind==="textarea")f.box.classList.add("full");if(key==="email")f.ctrl.type="email";grid.append(f.box);input[key]=f.ctrl}
 const src=make("details","section");const summary=make("summary","","출처 보기");src.append(summary);
-const urls=field("공개 출처 URL (한 줄에 하나씩)","textarea",(t.sources||[]).join("\n"));urls.box.classList.add("full");urls.ctrl.classList.add("sourceslist");src.append(urls.box);
+const urls=field("공개 출처 URL (한 줄에 하나씩)","textarea",(t.sources||[]).join("\n"));urls.box.classList.add("full");urls.ctrl.classList.add("sourceslist");profileField(urls,(t.sources||[]).join("\n"));src.append(urls.box);
 const note=make("p","note","수정한 공개 프로필 정보는 이후 메일 재수신 시 유지됩니다.");src.append(note);root.append(grid,src);
 const section=make("details","section");section.append(make("summary","","사내 관리 정보"));const internal=make("div","profilegrid");
 const status=field("관리 상태","select",t.status,["검토대기","검토중","관심","접촉예정","접촉중","보류","종료"]);
 const priority=field("관심도","select",t.priority,["미분류","핵심","높음","보통","낮음"]);
-const notes=field("내부 관리 메모","textarea",t.internal_notes);notes.box.classList.add("full");internal.append(status.box,priority.box,notes.box);section.append(internal);root.append(section);
-const actions=make("div","actions"),edit=make("button","ghost","수정"),save=make("button","primary","저장"),cancelEdit=make("button","ghost","취소"),message=make("span","message");
+const notes=field("내부 관리 메모","textarea",t.internal_notes);notes.box.classList.add("full");profileField(status,t.status);profileField(priority,t.priority);profileField(notes,t.internal_notes);internal.append(status.box,priority.box,notes.box);section.append(internal);root.append(section);
+const actions=make("div","profile-buttons"),edit=make("button","ghost","수정"),save=make("button","primary","수정 완료"),cancelEdit=make("button","ghost","취소"),del=make("button","danger","삭제"),message=make("span","message");
 const editControls=[...Object.values(input),urls.ctrl,status.ctrl,priority.ctrl,notes.ctrl];
-function editMode(on){editing=on;editControls.forEach(c=>c.disabled=!on);edit.classList.toggle("hidden",on);save.classList.toggle("hidden",!on);cancelEdit.classList.toggle("hidden",!on);summary.textContent=on?"출처 펼치기 · 수정":"출처 보기"}
+function editMode(on){editing=on;root.classList.toggle("is-editing",on);editControls.forEach(c=>c.disabled=!on);edit.classList.toggle("hidden",on);save.classList.toggle("hidden",!on);cancelEdit.classList.toggle("hidden",!on);del.classList.toggle("hidden",on);summary.textContent=on?"출처 펼치기 · 수정":"출처 보기"}
 edit.onclick=()=>editMode(true);cancelEdit.onclick=()=>choose(id,true);
-actions.append(edit,save,cancelEdit,message);root.append(actions);editMode(false);
+actions.append(edit,save,cancelEdit,del);$("profileButtons").replaceChildren(actions,$("closeDetail"));root.append(message);editMode(false);
+del.onclick=async()=>{if(!confirm(t.name+" 인재를 삭제하시겠습니까?\\n삭제하면 목록에서 제외되며 접촉 이력은 복구를 위해 보존됩니다."))return;
+ del.disabled=true;try{await api("/api/talents/"+id,{method:"DELETE",headers:{"X-Internal-Action":"1"}});clearDetail();await loadList(false)}catch(e){message.textContent="삭제 실패: "+e.message;del.disabled=false}};
+
 save.onclick=async()=>{save.disabled=true;message.textContent="";try{
 const changes={};for(const [key,ctrl] of Object.entries(input)){if(ctrl.value.trim()!==(t[key]||""))changes[key]=ctrl.value.trim()}
 const newSources=urls.ctrl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 if(JSON.stringify(newSources)!==JSON.stringify(t.sources||[]))changes.sources=newSources;
 changes.status=status.ctrl.value;changes.priority=priority.ctrl.value;changes.internal_notes=notes.ctrl.value;
 const res=await api("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify(changes)});
-message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name;editMode(false)
+message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name;for(const f of editFields)f.view.textContent=f.ctrl.value||"—";editMode(false)
 }catch(e){message.className="message error";message.textContent="저장 실패: "+e.message}finally{save.disabled=false}};
 const historySection=make("details","section");historySection.append(make("summary","","접촉 이력"));const history=make("div");const add=make("button","ghost","＋ 접촉 이력 추가");historySection.append(add,history);root.append(historySection);
 const entry=make("div","profilegrid hidden"),day=field("접촉일","input",""),channel=field("접촉 방식","select","이메일",["이메일","전화","미팅","기타"]),subject=field("주제","input",""),memo=field("내용","textarea","");day.ctrl.type="date";day.ctrl.value=new Date().toLocaleDateString("sv-SE");memo.box.classList.add("full");entry.append(day.box,channel.box,subject.box,memo.box);

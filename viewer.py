@@ -1,29 +1,86 @@
-"""Local-only viewer; no outgoing HTTP or external API calls."""
-import json, os, base64, hmac
-from fastapi import FastAPI, Request, Depends, HTTPException
+"""Private, local-only dashboard and CRUD API. No outbound requests."""
+import os, base64, hmac
+from pathlib import Path
+from fastapi import FastAPI, Request, Depends, HTTPException, Body, Query
 from fastapi.responses import HTMLResponse
-from receiver import connect_db
+from management import database, list_talents, get_talent, edit_talent, add_contact, contacts
 
-app=FastAPI(docs_url=None,redoc_url=None,title="Internal Talent Pool")
+app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool")
 
-def guard(request:Request):
-    pwd=os.getenv("INTERNAL_VIEW_PASSWORD")
-    if not pwd: raise HTTPException(503,"INTERNAL_VIEW_PASSWORD is required")
+def guard(request: Request):
+    password=os.getenv("INTERNAL_VIEW_PASSWORD")
+    if not password:
+        raise HTTPException(503, "INTERNAL_VIEW_PASSWORD is required")
     try:
-        token=request.headers.get("authorization","").split(" ",1)[1]
-        candidate=base64.b64decode(token).decode().split(":",1)[1]
-        if hmac.compare_digest(candidate,pwd): return
-    except Exception: pass
+        scheme, token=request.headers.get("authorization","").split(" ",1)
+        if scheme.lower()!="basic": raise ValueError()
+        decoded=base64.b64decode(token,validate=True).decode("utf-8")
+        username,provided=decoded.split(":",1)
+        if username and hmac.compare_digest(provided,password): return username
+    except (ValueError, UnicodeError, IndexError):
+        pass
     raise HTTPException(401,"Login required",headers={"WWW-Authenticate":'Basic realm="Internal Talent Pool"'})
+
+def write_guard(request:Request, _=Depends(guard)):
+    if request.headers.get("X-Internal-Action")!="1":
+        raise HTTPException(403,"Action header missing")
+    origin=request.headers.get("origin")
+    if origin:
+        from urllib.parse import urlsplit
+        try:
+            o=urlsplit(origin)
+            if o.scheme!=request.url.scheme or o.netloc!=request.headers.get("host",""):
+                raise HTTPException(403,"Origin mismatch")
+        except ValueError: raise HTTPException(403,"Invalid origin")
+    return _
 
 @app.get("/",response_class=HTMLResponse)
 def index(_=Depends(guard)):
-    return """<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>사내 인재 Pool</title><style>body{font:16px sans-serif;background:#f5f7fa;max-width:900px;margin:25px auto;padding:16px}article{background:white;border:1px solid #ddd;border-radius:12px;margin:14px 0;padding:16px}input{padding:12px;width:92%;max-width:430px}a{word-break:break-all}</style><h1>사내 인재 Pool</h1><p>사내 로컬 DB 조회 · 외부 전송 기능 없음</p><input id="q" placeholder="이름 / 소속 / 연구 분야 검색"><div id="results"></div><script>async function load(){const r=await fetch('/api/talents?q='+encodeURIComponent(document.querySelector('#q').value));const d=await r.json();const root=document.querySelector('#results');root.replaceChildren();for(const t of d.items){const box=document.createElement('article');const title=document.createElement('h3');title.textContent=t.name+' · '+t.org;box.append(title);for(const field of ['headline','domain','summary','why_fit']){const p=document.createElement('p');p.textContent=t[field]||'';box.append(p)}for(const u of t.sources){try{const parsed=new URL(u);if(parsed.protocol==='https:'){const a=document.createElement('a');a.href=parsed.href;a.textContent=parsed.hostname+' (공개 근거)';a.target='_blank';a.rel='noopener noreferrer';box.append(a,document.createElement('br'))}}catch{}}root.append(box)}}document.querySelector('#q').oninput=load;load()</script></html>"""
+    return Path(__file__).with_name("dashboard.html").read_text(encoding="utf-8")
 
 @app.get("/api/talents")
-def talents(q:str="",_=Depends(guard)):
-    db=connect_db(os.getenv("INTERNAL_DB_PATH","./internal_talents.db"))
+def talents(q:str="",status:str="",priority:str="",domain:str="",limit:int=Query(200,ge=1,le=500),_=Depends(guard)):
+    db=database()
     try:
-        rows=db.execute("SELECT * FROM talent WHERE name LIKE ? OR org LIKE ? OR domain LIKE ? ORDER BY updated_at DESC LIMIT 300",("%"+q[:80]+"%",)*3).fetchall()
-        return {"items":[{**dict(row),"sources":json.loads(row["sources_json"])} for row in rows]}
+        return {"items":list_talents(db,q=q,status=status,priority=priority,domain=domain,limit=limit)}
+    finally: db.close()
+
+@app.get("/api/talents/{talent_id}")
+def detail(talent_id:int,_=Depends(guard)):
+    db=database()
+    try:
+        result=get_talent(db,talent_id)
+        if not result: raise HTTPException(404,"Talent not found")
+        return result
+    finally: db.close()
+
+@app.patch("/api/talents/{talent_id}")
+def update(talent_id:int, changes:dict=Body(...),_=Depends(write_guard)):
+    db=database()
+    try:
+        try: result=edit_talent(db,talent_id,changes)
+        except ValueError as e: raise HTTPException(422,str(e))
+        if not result: raise HTTPException(404,"Talent not found")
+        return result
+    finally: db.close()
+
+@app.get("/api/talents/{talent_id}/contacts")
+def history(talent_id:int,_=Depends(guard)):
+    db=database()
+    try:
+        if not get_talent(db,talent_id): raise HTTPException(404,"Talent not found")
+        return {"items":contacts(db,talent_id)}
+    finally: db.close()
+
+@app.post("/api/talents/{talent_id}/contacts")
+def create_contact(talent_id:int, entry:dict=Body(...),_=Depends(write_guard)):
+    required={"contact_at","channel","subject","memo"}
+    if set(entry)!=required: raise HTTPException(422,"Invalid contact fields")
+    db=database()
+    try:
+        try:
+            new_id=add_contact(db,talent_id,**entry)
+        except (ValueError,TypeError): raise HTTPException(422,"Invalid contact values")
+        if new_id is None: raise HTTPException(404,"Talent not found")
+        return {"id":new_id}
     finally: db.close()

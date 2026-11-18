@@ -131,3 +131,20 @@ def delete_candidate(talent_id:int,_=Depends(write_guard)):
             raise HTTPException(404,"Talent not found")
         return {"deleted":True}
     finally: db.close()
+
+@app.get("/api/monthly-reviews")
+def monthly_reviews(_=Depends(guard)):
+    from refresh_receiver import create_refresh_table
+    db=database()
+    try:
+        create_refresh_table(db)
+        rows=db.execute("""SELECT id,batch_id,candidate_name,previous_org,field,
+            old_value,proposed_value,evidence_url,evidence_excerpt,reason,status,created_at
+            FROM pending_refresh ORDER BY created_at DESC,id DESC LIMIT 500""").fetchall()
+        return {"items":[dict(row) for row in rows]}
+    finally:
+        db.close()
+
+@app.get("/monthly-reviews",response_class=HTMLResponse)
+def monthly_review_page(_=Depends(guard)):
+    return Path(__file__).with_name("monthly_reviews.html").read_text(encoding="utf-8")

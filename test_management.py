@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from receiver import connect_db
-from management import database, get_talent, edit_talent, add_contact, contacts, list_talents
+from management import database, get_talent, edit_talent, add_contact, contacts, list_talents, delete_talent
 
 class ManagementTests(unittest.TestCase):
     def setUp(self):
@@ -61,6 +61,18 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(result["summary"],"수동 보완")
         self.assertEqual(result["sources"],["https://example.org/new"])
         self.assertEqual(result["email"],"contact@example.org")
+        db.close()
+
+    def test_classification_and_soft_delete(self):
+        db=database()
+        edit_talent(db,1,{"classification":"HBM 핵심 설계"})
+        self.assertEqual(get_talent(db,1)["classification"],"HBM 핵심 설계")
+        add_contact(db,1,"이메일","연락","보존할 이력","2026-11-18")
+        self.assertTrue(delete_talent(db,1))
+        self.assertIsNone(get_talent(db,1))
+        self.assertEqual(list_talents(db),[])
+        self.assertEqual(len(contacts(db,1)),1)
+        self.assertFalse(delete_talent(db,1))
         db.close()
 
     def test_mail_import_keeps_internal_notes(self):

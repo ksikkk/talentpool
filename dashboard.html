@@ -12,7 +12,26 @@ main{max-width:1350px;margin:0 auto;padding:26px 22px}button,input,select,textar
 input,select,textarea{border:1px solid #dbe2ed;border-radius:10px;background:white;padding:11px;color:#21354f;min-width:0}
 button.primary{background:#205595;color:#fff;border:0;border-radius:10px;padding:11px 17px;font-weight:650}
 button.ghost{background:white;border:1px solid #d9e1ed;border-radius:10px;padding:10px 14px;color:#365579}
-.workspace{display:grid;grid-template-columns:minmax(350px,1.02fr) minmax(440px,1.15fr);gap:18px;align-items:start}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+.workspace.expanded{grid-template-columns:minmax(320px,1fr) minmax(440px,1.2fr)}
+.workspace:not(.expanded) #detailPanel{display:none}
+.workspace:not(.expanded) .list{max-height:none}
+.field input:disabled,.field textarea:disabled,.field select:disabled{background:#f7f9fc;color:#384b64;border-color:#e8edf4;opacity:1}
+.field input:disabled,.field textarea:disabled{cursor:default}
+.field textarea:disabled{resize:none}
+.domains{margin:0 0 23px;padding:20px 22px;background:white;border:1px solid #e4eaf2;border-radius:17px;box-shadow:0 3px 15px #102d4a09}
+.domainhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+.domainlist{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px}
+.domaincard{background:#f7f9fd;border:1px solid #e6edf6;border-radius:12px;text-align:left;padding:12px 13px;color:#28415f}
+.domaincard:hover,.domaincard.on{border-color:#3e73b2;background:#eaf3ff}
+.domaincard .bar{height:6px;border-radius:9px;background:#e4ebf5;overflow:hidden;margin-top:8px}
+.domaincard .bar span{display:block;height:100%;background:#477db8}
+.domaincard .domainline{display:flex;justify-content:space-between;gap:10px;font-weight:600;font-size:13px}
+.domaincard .domaincount{color:#3a669b;font-variant-numeric:tabular-nums}
+.person .listline{font-size:13px;color:#657890;margin-top:3px}
+.person .listline b{font-weight:650;color:#405873}
+.editactions{display:flex;gap:8px;align-items:center}
+
 .panel{background:white;border:1px solid #e4eaf2;border-radius:17px;box-shadow:0 3px 17px #102d4a0c;overflow:hidden}
 .panelhead{padding:19px 21px;border-bottom:1px solid #edf1f6;display:flex;align-items:center;justify-content:space-between}
 .caption{color:#72849b;font-size:12px}.list{max-height:73vh;overflow:auto}
@@ -32,7 +51,7 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 .message{font-size:13px;color:#257347}.message.error{color:#b23443}
 .contact{padding:14px;border:1px solid #e8edf4;border-radius:12px;margin-top:10px}.contact p{margin:5px 0 0;white-space:pre-wrap;color:#556b83}
 .sourceslist{white-space:pre-wrap;word-break:break-all;min-height:76px}.empty{padding:30px;text-align:center;color:#7a8ca1}
-@media(max-width:950px){.workspace{grid-template-columns:1fr}.list{max-height:330px}}
+@media(max-width:950px){.workspace.expanded{grid-template-columns:1fr}.list{max-height:350px}}
 @media(max-width:560px){main{padding:16px 12px}.metrics{gap:8px}.metric{padding:12px}.metric .num{font-size:24px}.profilegrid{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}header{padding:16px}}
 </style></head><body>
 <header><h1>인재 Pool 관리</h1><span class="caption">Talent Management</span></header>
@@ -41,11 +60,12 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 <button class="metric" data-metric="core"><span>핵심 관리</span><span class="num" id="core">—</span><span class="sub">관심도 ‘핵심’</span></button>
 <button class="metric" data-metric="contact"><span>접촉중</span><span class="num" id="contact">—</span><span class="sub">접촉 이력 등록 인재</span></button>
 </div>
+<section class="domains"><div class="domainhead"><h2>분야별 현황</h2><span class="caption" id="domainCaption">연구 분야별 등록 인재</span></div><div class="domainlist" id="domainList"></div></section>
 <div class="toolbar"><input id="search" placeholder="연구 분야 · 성명 · 소속 검색"><button id="reset" class="ghost">검색 초기화</button></div>
-<div class="workspace">
+<div class="workspace" id="workspace">
 <section class="panel"><div class="panelhead"><h2>인재 목록</h2><span class="caption" id="counter"></span></div><div id="list" class="list"></div></section>
 <section class="panel" id="detailPanel"><div class="panelhead"><h2>인재 상세 및 관리</h2><button id="closeDetail" class="ghost hidden">닫기 ×</button></div>
-<div id="details" class="detail hidden"></div><div id="placeholder" class="placeholder">인재를 선택하면 상세 정보를 확인할 수 있습니다.</div></section>
+<div id="details" class="detail"></div></section>
 </div></main>
 <script>
 "use strict";

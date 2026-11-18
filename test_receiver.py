@@ -47,8 +47,8 @@ class ReceiverTests(unittest.TestCase):
         raw=sample_mail()
         msg=BytesParser(policy=policy.default).parsebytes(raw)
         old=msg.get_body(preferencelist=("plain",)).get_content()
-        obj=json.loads(old.split("\\n",1)[1])
-        msg.set_content("TALENTPOOL_JSON_V2\\n"+json.dumps(obj,ensure_ascii=False,indent=2))
+        obj=json.loads(old.split("\n",1)[1])
+        msg.set_content("TALENTPOOL_JSON_V2\n"+json.dumps(obj,ensure_ascii=False,indent=2))
         with tempfile.TemporaryDirectory() as folder:
             db=connect_db(Path(folder)/"pool.db")
             self.assertEqual(import_mail(db,msg.as_bytes(),SECRET,SENDER),"imported")

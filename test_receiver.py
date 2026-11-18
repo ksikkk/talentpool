@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 from email.message import EmailMessage
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from receiver import connect_db, import_mail
 
@@ -39,6 +41,17 @@ class ReceiverTests(unittest.TestCase):
             self.assertEqual(import_mail(db,sample_mail(),SECRET,SENDER),"imported")
             self.assertEqual(import_mail(db,sample_mail(),SECRET,SENDER),"duplicate")
             self.assertEqual(db.execute("SELECT count(*) FROM talent").fetchone()[0],1)
+            db.close()
+
+    def test_reformatted_json_whitespace(self):
+        raw=sample_mail()
+        msg=BytesParser(policy=policy.default).parsebytes(raw)
+        old=msg.get_body(preferencelist=("plain",)).get_content()
+        obj=json.loads(old.split("\\n",1)[1])
+        msg.set_content("TALENTPOOL_JSON_V2\\n"+json.dumps(obj,ensure_ascii=False,indent=2))
+        with tempfile.TemporaryDirectory() as folder:
+            db=connect_db(Path(folder)/"pool.db")
+            self.assertEqual(import_mail(db,msg.as_bytes(),SECRET,SENDER),"imported")
             db.close()
 
     def test_invalid_signature_rejected(self):

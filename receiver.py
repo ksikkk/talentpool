@@ -95,7 +95,7 @@ def parse_mail(raw, secret, trusted_sender):
     people=payload.get("talents")
     if not isinstance(people,list) or not 1<=len(people)<=50: raise ValueError("invalid talent list")
     required={"name","org","headline","domain","location","summary","why_fit","sources"}
-    optional={"requested_field","email","email_source"}
+    optional={"requested_field","requested_fields","email","email_source"}
     for p in people:
         if not isinstance(p,dict) or not required.issubset(p) or not set(p).issubset(required|optional):
             raise ValueError("unexpected talent fields")
@@ -106,6 +106,9 @@ def parse_mail(raw, secret, trusted_sender):
         if not isinstance(sources,list) or not 1<=len(sources)<=8 or not all(isinstance(u,str) and len(u)<1500 and valid_url(u) for u in sources):
             raise ValueError("invalid sources")
         if not isinstance(p.get("requested_field",""),str) or len(p.get("requested_field",""))>130:
+            raise ValueError("invalid requested field")
+        groups=p.get("requested_fields",[])
+        if not isinstance(groups,list) or len(groups)>20 or any(not isinstance(x,str) or not x.strip() or len(x)>130 for x in groups):
             raise ValueError("invalid requested field")
         mail=p.get("email","")
         proof=p.get("email_source","")
@@ -144,9 +147,11 @@ def import_mail(db,raw,secret,trusted_sender):
                 new_values["email_source"]=p.get("email_source","")
             if p.get("requested_field") and not row["requested_field"]:
                 new_values["requested_field"]=p["requested_field"]
-            if p.get("requested_field"):
-                db.execute("INSERT OR IGNORE INTO talent_field(talent_id,field) VALUES(?,?)",
-                           (row["id"],p["requested_field"]))
+            fields=list(dict.fromkeys([*p.get("requested_fields",[]),p.get("requested_field","")]))
+            for field in fields:
+                if field.strip():
+                    db.execute("INSERT OR IGNORE INTO talent_field(talent_id,field) VALUES(?,?)",
+                               (row["id"],field.strip()))
             new_values["updated_at"]=now
             assignments=", ".join(k+"=?" for k in new_values)
             db.execute("UPDATE talent SET "+assignments+" WHERE identity_key=?",

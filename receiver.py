@@ -51,10 +51,19 @@ def parse_mail(raw, secret, trusted_sender):
     prefix="TALENTPOOL_JSON_V2\n"
     if not body.startswith(prefix): raise ValueError("invalid marker")
     raw_json=body[len(prefix):].strip()
-    expected="sha256="+hmac.new(secret.encode(),raw_json.encode(),hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(msg.get("X-Talentpool-Signature",""),expected):
-        raise ValueError("invalid HMAC signature")
+    # Require strict JSON; never deserialize arbitrary data or accept unsigned content.
     payload=json.loads(raw_json)
+    signature=msg.get("X-Talentpool-Signature","").strip()
+    def signed(value):
+        candidate="sha256="+hmac.new(secret.encode(),value.encode("utf-8"),hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature,candidate)
+    # A mail gateway may reformat whitespace in a JSON body. The sender uses
+    # json.dumps(..., ensure_ascii=False, separators=(',', ':'), sort_keys=True).
+    # Accept either exact transport bytes or the *same JSON object* in that
+    # canonical sender representation. Do not disable HMAC checking.
+    canonical=json.dumps(payload,ensure_ascii=False,separators=(",",":"),sort_keys=True)
+    if not (signed(raw_json) or signed(canonical)):
+        raise ValueError("invalid HMAC signature")
     if not isinstance(payload,dict) or payload.get("schema_version")!=2 or payload.get("kind")!="talentpool_handoff":
         raise ValueError("invalid schema")
     batch=payload.get("batch_id","")

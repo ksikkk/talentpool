@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>사내 인재 Pool 관리</title><style>
+:root{font-family:system-ui,"Malgun Gothic",sans-serif;color:#162337;background:#f3f6fa}
+*{box-sizing:border-box}body{margin:0}header{background:#10233e;color:white;padding:20px 26px;display:flex;justify-content:space-between;align-items:center}
+header small{color:#b9cbe0}.shell{max-width:1380px;margin:0 auto;padding:25px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.metric,.panel{background:white;border:1px solid #e0e6ef;border-radius:14px;box-shadow:0 2px 8px #10233e0a}
+.metric{padding:20px}.metric strong{display:block;font-size:28px;margin-top:6px}.metric span{color:#5e728b;font-size:13px}
+.controls{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:10px;margin-bottom:15px}
+input,select,textarea,button{font:inherit;border:1px solid #d1dae6;border-radius:8px;padding:10px;background:#fff;color:#17263b}
+input,select,textarea{width:100%}button{cursor:pointer;background:#17385f;color:white;border-color:#17385f;font-weight:600}
+button.secondary{background:white;color:#17385f}button:disabled{opacity:.5;cursor:not-allowed}.layout{display:grid;grid-template-columns:minmax(290px,1fr) minmax(400px,1.3fr);gap:16px}
+.panel{overflow:hidden}.heading{padding:18px;border-bottom:1px solid #edf0f5;font-weight:700}.list{max-height:70vh;overflow:auto}
+.person{width:100%;background:white;color:inherit;text-align:left;padding:17px 18px;border:0;border-bottom:1px solid #eef1f5;border-radius:0;display:block;font-weight:400}
+.person:hover,.person.selected{background:#edf4ff}.person .name{font-weight:700;font-size:16px;margin-bottom:5px}
+.muted{color:#667a90;font-size:13px}.tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tag{background:#edf1f7;border-radius:99px;padding:4px 8px;font-size:12px}.detail{padding:22px;max-height:77vh;overflow:auto}
+.detail h2{margin:0 0 5px}section{margin:22px 0}section h3{font-size:15px;margin-bottom:9px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field label{display:block;font-size:12px;color:#62758d;margin-bottom:5px}
+.field.full{grid-column:1/-1}.actions{display:flex;align-items:center;gap:10px;margin:15px 0}
+.feedback{font-size:13px;color:#176332}.error{color:#9d2b2b}.contact{border:1px solid #e4eaf2;border-radius:10px;padding:12px;margin:8px 0}
+a{color:#1756a8;overflow-wrap:anywhere}.empty{padding:30px;color:#687a91;text-align:center}
+@media(max-width:850px){.metrics{grid-template-columns:repeat(2,1fr)}.controls{grid-template-columns:1fr 1fr}.layout{grid-template-columns:1fr}.list{max-height:300px}.detail{max-height:none}} 
+</style></head>
+<body><header><div><div style="font-weight:750;font-size:21px">사내 인재 Pool</div><small>Talent Management · 사내 로컬 관리</small></div><small>외부 전송 기능 없음</small></header>
+<main class="shell">
+<div class="metrics"><div class="metric"><span>전체 등록 인재</span><strong id="mTotal">—</strong></div><div class="metric"><span>핵심 관리</span><strong id="mTop">—</strong></div><div class="metric"><span>접촉중</span><strong id="mContact">—</strong></div><div class="metric"><span>후속 조치 예정</span><strong id="mNext">—</strong></div></div>
+<div class="controls">
+<input id="search" placeholder="인재 이름, 소속, 전문 분야 검색">
+<select id="statusFilter"><option value="">전체 상태</option><option>검토대기</option><option>검토중</option><option>관심</option><option>접촉예정</option><option>접촉중</option><option>보류</option><option>종료</option></select>
+<select id="priorityFilter"><option value="">전체 관심도</option><option>미분류</option><option>핵심</option><option>높음</option><option>보통</option><option>낮음</option></select>
+<button id="refresh" class="secondary">새로고침</button>
+</div>
+<div class="layout"><div class="panel"><div class="heading">인재 목록 <span id="count" class="muted"></span></div><div class="list" id="people"><div class="empty">목록 불러오는 중…</div></div></div>
+<div class="panel"><div class="heading">인재 상세 및 관리</div><div id="details" class="detail"><div class="empty">왼쪽 목록에서 인재를 선택하세요.</div></div></div></div>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let all=[],activeId=null,typingTimer;
+const allowedUrl=u=>{try{const p=new URL(u);return p.protocol==="https:"?p.href:null}catch{return null}};
+function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n}
+function field(label,tag,options,value){const wrap=el("div","field");const l=el("label","",label);const inp=el(tag);if(tag==="select"){for(const option of options){const o=el("option","",option);o.value=option;inp.append(o)}}else if(tag==="textarea"){inp.rows=4}inp.value=value||"";wrap.append(l,inp);return {wrap,inp}}
+async function request(path,opts){const r=await fetch(path,{credentials:"same-origin",...opts});if(!r.ok){throw new Error("서버 오류 ("+r.status+")")}return r.json()}
+function metric(items){$("mTotal").textContent=items.length;$("mTop").textContent=items.filter(x=>x.priority==="핵심").length;$("mContact").textContent=items.filter(x=>x.status==="접촉중").length;$("mNext").textContent=items.filter(x=>x.next_action_date).length}
+async function load(){try{const d=await request("/api/talents?limit=500");all=d.items;metric(all);renderList()}catch(e){$("people").textContent="목록 조회에 실패했습니다.";}}
+function renderList(){
+ const q=$("search").value.trim().toLowerCase(),st=$("statusFilter").value,pr=$("priorityFilter").value;
+ const items=all.filter(t=>(!q||[t.name,t.org,t.headline,t.domain].some(v=>(v||"").toLowerCase().includes(q)))&&(!st||t.status===st)&&(!pr||t.priority===pr));
+ $("count").textContent=items.length+"명";const root=$("people");root.replaceChildren();
+ if(!items.length){root.append(el("div","empty","해당 조건의 인재가 없습니다."));return}
+ for(const t of items){const b=el("button","person"+(activeId===t.id?" selected":""));b.type="button";
+ b.append(el("div","name",t.name+" · "+t.org),el("div","muted",[t.headline,t.domain].filter(Boolean).join(" | ")));
+ const tags=el("div","tags");tags.append(el("span","tag",t.status||"검토대기"),el("span","tag",t.priority||"미분류"));b.append(tags);
+ b.onclick=()=>selectTalent(t.id);root.append(b)}
+}
+async function selectTalent(id){activeId=id;renderList();try{const t=await request("/api/talents/"+id);const root=$("details");root.replaceChildren();
+ root.append(el("h2","",t.name),el("div","muted",[t.org,t.headline,t.domain,t.location].filter(Boolean).join(" · ")));
+ const research=el("section");research.append(el("h3","","공개 프로필 및 발굴 근거"));
+ for(const [label,value] of [["연구·경력 요약",t.summary],["인재 적합성",t.why_fit]]){research.append(el("strong","",label),el("p","",value||"기록 없음"))}
+ const links=el("div");links.append(el("strong","","공개 출처 "));
+ for(const u of (t.sources||[])){const href=allowedUrl(u);if(!href)continue;const a=el("a","",href);a.href=href;a.target="_blank";a.rel="noopener noreferrer";links.append(a,el("div"))}research.append(links);root.append(research);
+ const form=el("section");form.append(el("h3","","사내 관리 정보"));
+ const grid=el("div","grid");
+ const controls={};
+ for(const [key,label,tag,options] of [
+ ["status","관리 상태","select",["검토대기","검토중","관심","접촉예정","접촉중","보류","종료"]],
+ ["priority","관심도","select",["미분류","핵심","높음","보통","낮음"]],
+ ["owner","담당자","input",[]],
+ ["next_action_date","후속 조치 날짜","input",[]],
+ ["next_action","후속 조치 내용","input",[]],
+ ["internal_notes","내부 관리 메모","textarea",[]]
+ ]){const f=field(label,tag,options,t[key]);controls[key]=f.inp;if(key==="next_action_date"){f.inp.type="date"}if(key==="next_action"||key==="internal_notes")f.wrap.classList.add("full");grid.append(f.wrap)}
+ form.append(grid);const action=el("div","actions");const save=el("button","","관리 정보 저장");const feedback=el("span","feedback");
+ save.onclick=async()=>{save.disabled=true;feedback.textContent="";try{const value={};for(const [k,node] of Object.entries(controls))value[k]=node.value;await request("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify(value)});feedback.textContent="저장했습니다.";await load()}catch(e){feedback.className="feedback error";feedback.textContent="저장 실패: "+e.message}finally{save.disabled=false}};
+ action.append(save,feedback);form.append(action);root.append(form);
+ const section=el("section");section.append(el("h3","","접촉 이력"));
+ const logGrid=el("div","grid");const date=field("접촉일","input",[],"");date.inp.type="date";date.inp.value=new Date().toLocaleDateString("sv-SE");
+ const channel=field("접촉 방식","select",["이메일","전화","미팅","기타"],"이메일");
+ const subject=field("제목·주제","input",[],"");const memo=field("접촉 기록","textarea",[],"");memo.wrap.classList.add("full");
+ logGrid.append(date.wrap,channel.wrap,subject.wrap,memo.wrap);section.append(logGrid);
+ const logAction=el("div","actions");const add=el("button","secondary","접촉 이력 추가");const logFeedback=el("span","feedback");
+ add.onclick=async()=>{add.disabled=true;try{await request("/api/talents/"+id+"/contacts",{method:"POST",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify({contact_at:date.inp.value,channel:channel.inp.value,subject:subject.inp.value,memo:memo.inp.value})});logFeedback.textContent="이력을 추가했습니다.";subject.inp.value="";memo.inp.value="";await showContacts()}catch(e){logFeedback.className="feedback error";logFeedback.textContent="추가 실패: "+e.message}finally{add.disabled=false}};
+ logAction.append(add,logFeedback);section.append(logAction);const history=el("div");section.append(history);root.append(section);
+ async function showContacts(){const d=await request("/api/talents/"+id+"/contacts");history.replaceChildren();if(!d.items.length)history.append(el("p","muted","접촉 이력이 없습니다."));for(const c of d.items){const card=el("div","contact");card.append(el("strong","",c.contact_at+" · "+c.channel+" · "+c.subject),el("p","",c.memo||"메모 없음"));history.append(card)}}
+ await showContacts();
+ }catch(e){$("details").textContent="상세 조회에 실패했습니다."}}
+$("refresh").onclick=load;$("search").oninput=()=>{clearTimeout(typingTimer);typingTimer=setTimeout(renderList,130)};$("statusFilter").onchange=renderList;$("priorityFilter").onchange=renderList;load();
+</script></body></html>

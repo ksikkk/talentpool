@@ -35,7 +35,7 @@ foreach ($address in $AllowedClientIPs) {
     }
     $allowed += $address
 }
-$env:INTERNAL_ALLOWED_CIDRS = (($allowed | Select-Object -Unique | ForEach-Object { "$_/32" }) -join ",")
+$env:INTERNAL_ALLOWED_CIDRS = (($allowed | Select-Object -Unique | ForEach-Object { "$($_)/32" }) -join ",")
 Write-Host "Local Talent Pool URL: http://$($ServerIP):$Port" -ForegroundColor Green
 if ($AllowedClientIPs.Count -eq 0) {
     Write-Host "Local-server-only access. To add another approved PC: .\start_lan.ps1 -AllowedClientIPs '10.1.2.3'"
@@ -43,4 +43,5 @@ if ($AllowedClientIPs.Count -eq 0) {
     Write-Host "Approved remote client IP(s): $($AllowedClientIPs -join ', ')"
     Write-Host "IT-approved Windows Firewall TCP port $Port source-IP restriction is still required." -ForegroundColor Yellow
 }
-python -m uvicorn viewer:app --host $ServerIP --port $Port
+Write-Host "Use this URL from an approved client: http://$($ServerIP):$Port" -ForegroundColor Cyan
+python -m uvicorn viewer:app --host $ServerIP --port $Port --no-proxy-headers

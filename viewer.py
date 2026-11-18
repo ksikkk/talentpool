@@ -15,6 +15,8 @@ def guard(request: Request):
         configured=os.getenv("INTERNAL_ALLOWED_CIDRS","").strip()
         networks=[ipaddress.ip_network(x.strip(),strict=False)
                   for x in configured.split(",") if x.strip()]
+        # Deny public or overly broad network configuration.
+        networks=[net for net in networks if net.is_private and net.prefixlen >= (16 if net.version==4 else 64)]
         if peer.is_loopback or any(peer in network for network in networks):
             return True
     except ValueError:

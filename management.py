@@ -83,7 +83,7 @@ def edit_talent(db, talent_id, updates):
         elif k=="status" and v not in STATUSES: raise ValueError("invalid status")
         elif k=="priority" and v not in PRIORITIES: raise ValueError("invalid priority")
         elif k in {"name","org"} and not v.strip(): raise ValueError("name and organization required")
-        elif k=="email" and v and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+",v):
+        elif k=="email" and v and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",v):
             raise ValueError("invalid email")
     existing=get_talent(db,talent_id)
     if not existing: return None

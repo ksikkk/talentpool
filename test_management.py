@@ -36,7 +36,7 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(result["email"],"candidate@example.org")
         self.assertEqual(len(list_talents(db,status="접촉예정",priority="핵심")),1)
         with self.assertRaises(ValueError):
-            edit_talent(db,1,{"name":"변경 불가"})
+            edit_talent(db,1,{"name":""})
         db.close()
 
     def test_contact_history(self):

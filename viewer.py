@@ -7,22 +7,22 @@ from management import database, list_talents, get_talent, edit_talent, add_cont
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool")
 
-LAN_NETS = tuple(ipaddress.ip_network(n) for n in (
-    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
-))
-
 def guard(request: Request):
-    """No app login; explicit LAN sharing only. Never permit public clients."""
+    """Localhost or explicitly launched same-subnet LAN sharing; fail closed."""
     ip = request.client.host if request.client else ""
     try:
         peer = ipaddress.ip_address(ip)
         if peer.is_loopback:
             return True
-        if os.getenv("TALENTPOOL_LAN_SHARE") == "1" and any(peer in n for n in LAN_NETS):
-            return True
+        network_text = os.getenv("TALENTPOOL_SHARE_SUBNET", "").strip()
+        if network_text:
+            subnet = ipaddress.ip_network(network_text, strict=False)
+            # Only an IPv4, reasonably narrow network; no blanket internet range.
+            if subnet.version == 4 and subnet.prefixlen >= 24 and peer in subnet:
+                return True
     except ValueError:
         pass
-    raise HTTPException(403, "Access restricted to internal private-network clients")
+    raise HTTPException(403, "Access restricted to the selected local subnet")
 
 
 def write_guard(request:Request, _=Depends(guard)):

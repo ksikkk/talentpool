@@ -81,8 +81,9 @@ const priority=field("관심도","select",t.priority,["미분류","핵심","높�
 const notes=field("내부 관리 메모","textarea",t.internal_notes);notes.box.classList.add("full");internal.append(status.box,priority.box,notes.box);section.append(internal);root.append(section);
 const actions=make("div","actions"),save=make("button","primary","변경 내용 저장"),message=make("span","message");actions.append(save,message);root.append(actions);
 save.onclick=async()=>{save.disabled=true;message.textContent="";try{
-const changes={};for(const [key,ctrl] of Object.entries(input))changes[key]=ctrl.value.trim();
-changes.sources=urls.ctrl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+const changes={};for(const [key,ctrl] of Object.entries(input)){if(ctrl.value.trim()!==(t[key]||""))changes[key]=ctrl.value.trim()}
+const newSources=urls.ctrl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+if(JSON.stringify(newSources)!==JSON.stringify(t.sources||[]))changes.sources=newSources;
 changes.status=status.ctrl.value;changes.priority=priority.ctrl.value;changes.internal_notes=notes.ctrl.value;
 const res=await api("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify(changes)});
 message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name
@@ -98,6 +99,6 @@ await loadHistory();
 async function loadList(reset=true){try{const d=await api("/api/talents?limit=500");people=d.items;stats();if(reset&&selected&&!people.some(x=>x.id===selected))clearDetail();list()}catch(e){$("list").replaceChildren(make("div","empty","목록 조회에 실패했습니다."))}}
 $("closeDetail").onclick=clearDetail;$("search").oninput=list;$("reset").onclick=()=>{$("search").value="";metric="all";document.querySelectorAll(".metric").forEach(b=>b.classList.toggle("on",b.dataset.metric==="all"));list()};
 document.querySelectorAll(".metric").forEach(b=>b.onclick=()=>{metric=b.dataset.metric;document.querySelectorAll(".metric").forEach(m=>m.classList.toggle("on",m===b));if(selected&&((metric==="core"&&people.find(p=>p.id===selected)?.priority!=="핵심")||(metric==="contact"&&!people.find(p=>p.id===selected)?.has_contact)))clearDetail();list()});
-document.addEventListener("click",e=>{if(selected&&!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar"))clearDetail()});
+document.addEventListener("click",e=>{if(selected&&(e.target===$("details")||e.target===$("detailPanel")||!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar")))clearDetail()});
 loadList();
 </script></body></html>

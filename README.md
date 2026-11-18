@@ -240,3 +240,18 @@ Windows 네트워크 프로필이 Public인 공인 IP는 자동 공유하지 않
 ```powershell
 python -m unittest test_launch -v
 ```
+
+## 간편 공유 실행 (people 저장소 실행 방식 참고)
+
+현재 권장 실행 명령은 **`python app.py`**입니다. `ksikkk/people`의 `serve --share-edit`와 동일하게, 서버는 `0.0.0.0:8090`에 바인딩하고 실행 PC의 IPv4 후보를 출력합니다. IP 자동 발견에 실패하더라도 서버는 정상 실행을 계속합니다.
+
+```powershell
+# talentpool 폴더에서
+git pull origin main
+python -m unittest discover -p "test_*.py" -v
+python app.py
+```
+
+실행창의 `Other PC: http://실행PC-IP:8090` 주소를 동료에게 알려주세요. 주소가 여러 개면 실제 회사망 주소를 선택하세요. 표시되지 않으면 실행 PC에서 `ipconfig`로 확인합니다. **다른 직원도 별도 설치 없이 같은 URL로 접속**합니다. 다만 회사 방화벽/네트워크가 TCP 8090을 허용해야 하며, 정책을 우회하지 않습니다.
+
+비밀번호 없는 공동 관리이므로, IP와 포트에 도달 가능한 사용자는 조회·수정·삭제할 수 있습니다. 사내 승인 테스트에 한정하세요. 실제 채용 데이터 운영에는 사용자 인증·접근권한·HTTPS가 필요합니다. `run.bat`도 내부적으로 동일 `launch.py`를 사용하지만, 실행 방식은 `python app.py`를 권장합니다. 과거 `start_lan.ps1`은 더 이상 필요하지 않습니다.

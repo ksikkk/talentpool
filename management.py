@@ -19,6 +19,8 @@ def database():
     for key, definition in (
         ("priority", "TEXT NOT NULL DEFAULT '미분류'"),
         ("email", "TEXT NOT NULL DEFAULT ''"),
+        ("email_source", "TEXT NOT NULL DEFAULT ''"),
+        ("requested_field", "TEXT NOT NULL DEFAULT ''"),
         ("edited_fields_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("owner", "TEXT NOT NULL DEFAULT ''"),
         ("internal_notes", "TEXT NOT NULL DEFAULT ''"),
@@ -37,12 +39,19 @@ def database():
         created_at TEXT NOT NULL
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS ix_contact_talent ON contact_history(talent_id,contact_at DESC)")
+    db.execute("""CREATE TABLE IF NOT EXISTS talent_field(
+        talent_id INTEGER NOT NULL, field TEXT NOT NULL,
+        PRIMARY KEY(talent_id,field)
+    )""")
+    db.execute("""INSERT OR IGNORE INTO talent_field(talent_id,field)
+        SELECT id,requested_field FROM talent WHERE requested_field!=''""")
     db.commit()
     return db
 
 def talent_as_dict(row):
     item = dict(row)
     item["sources"] = json.loads(item.pop("sources_json"))
+    item["requested_fields"] = json.loads(item.pop("field_groups_json") or "[]")
     item["has_contact"] = bool(item.get("contact_count", 0))
     return item
 
@@ -57,21 +66,21 @@ def list_talents(db, q="", status="", priority="", domain="", limit=200):
         where.append("priority=?"); params.append(priority)
     if domain:
         where.append("domain LIKE ?"); params.append("%" + domain[:100] + "%")
-    statement = """SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count FROM talent"""
+    statement = """SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count, (SELECT json_group_array(field) FROM talent_field tf WHERE tf.talent_id=talent.id) AS field_groups_json FROM talent"""
     if where: statement += " WHERE " + " AND ".join(where)
     statement += " ORDER BY updated_at DESC,id DESC LIMIT ?"
     params.append(min(max(int(limit),1),500))
     return [talent_as_dict(r) for r in db.execute(statement, params).fetchall()]
 
 def get_talent(db, talent_id):
-    row = db.execute("""SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count FROM talent WHERE talent.id=?""", (talent_id,)).fetchone()
+    row = db.execute("""SELECT talent.*, (SELECT COUNT(*) FROM contact_history ch WHERE ch.talent_id=talent.id) AS contact_count, (SELECT json_group_array(field) FROM talent_field tf WHERE tf.talent_id=talent.id) AS field_groups_json FROM talent WHERE talent.id=?""", (talent_id,)).fetchone()
     return talent_as_dict(row) if row else None
 
 def edit_talent(db, talent_id, updates):
     import re
     from receiver import valid_url
     allowed = {"status", "priority", "internal_notes", "name", "org", "headline",
-               "domain", "summary", "why_fit", "email", "sources"}
+               "domain", "summary", "why_fit", "email", "sources", "requested_field"}
     if not updates or any(k not in allowed for k in updates):
         raise ValueError("invalid update fields")
     for k,v in updates.items():
@@ -96,6 +105,9 @@ def edit_talent(db, talent_id, updates):
     fields=", ".join(k+"=?" for k in converted)
     with db:
         db.execute("UPDATE talent SET "+fields+" WHERE id=?", [*converted.values(),talent_id])
+        if "requested_field" in updates and updates["requested_field"].strip():
+            db.execute("INSERT OR IGNORE INTO talent_field(talent_id,field) VALUES(?,?)",
+                       (talent_id,updates["requested_field"].strip()))
     return get_talent(db,talent_id)
 
 def add_contact(db,talent_id,channel,subject,memo,contact_at):

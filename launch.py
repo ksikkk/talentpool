@@ -1,63 +1,123 @@
-"""One-click LAN launcher for the existing FastAPI dashboard.
-No internet calls, external telemetry, or third-party packages beyond the project.
+"""Start the existing internal talent dashboard with one click on Windows.
+
+Network detection uses Windows local adapter configuration (no external requests).
+Intentionally allows only the selected interface's /24 (or narrower) subnet.
+Never opens Windows Firewall or forwards ports.
 """
 import ipaddress
+import json
 import os
-import socket
 import subprocess
 import sys
 
 PORT = 8090
+PS_COMMAND = r"""
+$addresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+  Where-Object { $_.AddressState -eq 'Preferred' -and
+    $_.IPAddress -notmatch '^(127\.|169\.254\.)' })
+$defaultIfs = @(Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+  Sort-Object RouteMetric | Select-Object -ExpandProperty InterfaceIndex -Unique)
+$items = @($addresses | ForEach-Object {
+  $a = $_
+  $profile = Get-NetConnectionProfile -InterfaceIndex $a.InterfaceIndex -ErrorAction SilentlyContinue
+  [pscustomobject]@{
+    ip = $a.IPAddress
+    prefix = $a.PrefixLength
+    alias = $a.InterfaceAlias
+    gateway = ($defaultIfs -contains $a.InterfaceIndex)
+    category = if ($profile) { [string]$profile.NetworkCategory } else { 'Unknown' }
+  }
+})
+ConvertTo-Json -InputObject $items -Compress
+"""
 
-def private_ipv4(value):
+def get_adapters():
     try:
-        ip = ipaddress.ip_address(value)
-        return ip.version == 4 and any(ip in n for n in (
-            ipaddress.ip_network("10.0.0.0/8"),
-            ipaddress.ip_network("172.16.0.0/12"),
-            ipaddress.ip_network("192.168.0.0/16"),
-        ))
+        p = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", PS_COMMAND],
+            capture_output=True, text=True, errors="replace", timeout=18
+        )
+        if p.returncode:
+            print("Windows network adapter lookup failed.")
+            return []
+        records = json.loads(p.stdout.lstrip("\ufeff").strip())
+        if isinstance(records, dict):
+            records = [records]
+        result = []
+        for row in records:
+            try:
+                addr = ipaddress.IPv4Address(row["ip"])
+                prefix = int(row["prefix"])
+                if addr.is_loopback or addr.is_link_local or not 1 <= prefix <= 32:
+                    continue
+                result.append({"ip": str(addr), "prefix": prefix,
+                               "alias": str(row.get("alias", "")),
+                               "gateway": bool(row.get("gateway")),
+                               "category": str(row.get("category", "Unknown"))})
+            except (KeyError, ValueError, TypeError):
+                continue
+        return result
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+
+def pick_adapter(adapters):
+    if not adapters:
+        print("No active LAN IPv4 adapter was detected.")
+        print("Check your network connection, or ask IT if your PC is managed.")
+        return None
+    adapters.sort(key=lambda a: (
+        not a["gateway"],
+        a["category"] not in ("DomainAuthenticated", "Private"),
+        "Ethernet" not in a["alias"] and "이더넷" not in a["alias"],
+        a["ip"]
+    ))
+    if len(adapters) == 1:
+        return adapters[0]
+    print("Available PC network addresses:")
+    for i, a in enumerate(adapters, 1):
+        print(f"  {i}. {a['alias']} - {a['ip']} ({a['category']})")
+    preferred = adapters[0]
+    answer = input(f"Press Enter for {preferred['ip']}, or enter number 1-{len(adapters)}: ").strip()
+    if not answer:
+        return preferred
+    try:
+        return adapters[int(answer) - 1] if 1 <= int(answer) <= len(adapters) else None
     except ValueError:
-        return False
-
-def choose_ip():
-    candidates = []
-    # No actual datagram is sent. The operating system selects the outbound interface.
-    for destination in ("10.255.255.255", "192.168.255.255"):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.connect((destination, 1))
-                candidates.append(sock.getsockname()[0])
-        except OSError:
-            pass
-    try:
-        candidates += socket.gethostbyname_ex(socket.gethostname())[2]
-    except OSError:
-        pass
-    return next((a for a in candidates if private_ipv4(a)), None)
+        return None
 
 def main():
-    print("=" * 54)
-    print("   Talent Pool - Easy LAN Start")
-    print("=" * 54)
-    local_ip = choose_ip()
-    if not local_ip:
-        print("Could not automatically identify a private LAN IPv4 address.")
-        print("You may have a corporate-managed/non-private IP.")
-        print("Please ask IT for the approved LAN address/network settings.")
+    print("=" * 56)
+    print("Talent Pool | One-click PC Server")
+    print("=" * 56)
+    chosen = pick_adapter(get_adapters())
+    if not chosen:
+        print("No usable network adapter was selected.")
         return 1
-    os.environ["TALENTPOOL_LAN_SHARE"] = "1"
-    print(f"\nServer:   http://127.0.0.1:{PORT}")
-    print(f"Share:    http://{local_ip}:{PORT}")
-    print("\nShare the second address with coworkers on the approved intranet.")
-    print("Keep this window open while the server is in use.")
-    print("The Windows firewall/corporate policy must allow TCP 8090.")
-    print("WARNING: reachable internal-network users can view/edit/delete.")
-    print("For real personnel data, use IT-approved SSO and HTTPS.\n")
-    cmd = [sys.executable, "-m", "uvicorn", "viewer:app",
-           "--host", "0.0.0.0", "--port", str(PORT), "--no-proxy-headers"]
+    addr = ipaddress.IPv4Address(chosen["ip"])
+    if addr.is_global and chosen["category"] != "DomainAuthenticated":
+        print("This IP appears internet-routable and the PC is not on a Windows domain-authenticated network.")
+        print("For safety, ask IT to configure an approved internal-only service.")
+        return 1
+
+    # The app remains passwordless for the approved test, so restrict remote
+    # clients to a small local subnet instead of arbitrary private/public IPs.
+    local_subnet = ipaddress.ip_network(
+        f"{addr}/{max(chosen['prefix'], 24)}", strict=False
+    )
+    os.environ["TALENTPOOL_SHARE_SUBNET"] = str(local_subnet)
+    print(f"\nThis PC: http://127.0.0.1:{PORT}")
+    print(f"Share:   http://{chosen['ip']}:{PORT}")
+    print(f"Allowed local subnet: {local_subnet}")
+    print("Keep this window open. Only clients in the allowed subnet can access.")
+    print("If a coworker cannot connect, company firewall/routing may require IT approval.")
+    print("WARNING: allowed clients can view, edit and delete records without login.")
+    print("For production, use company SSO and HTTPS.\n")
     try:
-        return subprocess.call(cmd)
+        return subprocess.call([
+            sys.executable, "-m", "uvicorn", "viewer:app",
+            "--host", chosen["ip"], "--port", str(PORT),
+            "--no-proxy-headers"
+        ])
     except KeyboardInterrupt:
         return 0
 

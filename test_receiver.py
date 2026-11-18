@@ -49,6 +49,14 @@ class ReceiverTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT count(*) FROM talent").fetchone()[0],0)
             db.close()
 
+    def test_recipient_display_name_accepted(self):
+        raw=sample_mail()
+        raw=raw.replace(b"To: jobinfo@samsung.com",b"To: Job Info <jobinfo@samsung.com>")
+        with tempfile.TemporaryDirectory() as folder:
+            db=connect_db(Path(folder)/"pool.db")
+            self.assertEqual(import_mail(db,raw,SECRET,SENDER),"imported")
+            db.close()
+
     def test_invalid_sender_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             db=connect_db(Path(folder)/"pool.db")

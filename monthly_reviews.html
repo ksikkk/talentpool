@@ -1,0 +1,26 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>월간 인재 정보 점검</title>
+<style>
+:root{font:15px/1.6 system-ui,"Malgun Gothic",sans-serif;background:#f5f7fa;color:#182b42}
+*{box-sizing:border-box}body{margin:0}header{background:#fff;border-bottom:1px solid #e2e8f1;padding:18px max(20px,calc((100vw - 1050px)/2));display:flex;align-items:center;justify-content:space-between}
+a{color:#285f9e;text-decoration:none}main{max-width:1050px;margin:0 auto;padding:24px 20px}
+h1{font-size:22px;margin:0}p{color:#58718d}.card{padding:22px;background:white;border:1px solid #e2e8f1;border-radius:15px;margin-bottom:12px}
+.label{font-size:12px;color:#71849b}.pill{display:inline-block;padding:3px 9px;border-radius:50px;background:#f0e8d8;color:#846017;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.change{background:#f6f8fc;border-radius:10px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+strong{font-weight:700}small{color:#657b95}.empty{padding:50px;text-align:center;color:#657b95;background:white;border-radius:12px}
+@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style>
+<header><h1>월간 인재 정보 점검</h1><a href="/">인재 Pool 돌아가기</a></header>
+<main><p>외부 공개 자료에서 변경이 감지된 항목입니다. 담당자가 출처를 검토하기 전에는 기존 인재 정보를 자동으로 덮어쓰지 않습니다.</p><div id="results"><div class="empty">점검 결과를 불러오는 중…</div></div></main>
+<script>
+const container=document.getElementById('results');
+function e(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
+async function load(){try{const res=await fetch('/api/monthly-reviews');if(!res.ok)throw new Error('서버 오류');const data=await res.json();container.replaceChildren();
+if(!data.items.length){container.append(e('div','empty','검토 대기 중인 변경사항이 없습니다.'));return}
+for(const item of data.items){const card=e('article','card');const name=e('h2','',item.candidate_name+' · '+item.previous_org);name.style.fontSize='18px';card.append(name,e('span','pill','검토 대기'),e('p','label','확인일: '+item.created_at));
+const grid=e('div','grid');const old=e('div','change');old.append(e('div','label','기존 '+item.field),e('strong','',item.old_value||'정보 없음'));const change=e('div','change');change.append(e('div','label','공개 자료에서 새로 확인한 '+item.field),e('strong','',item.proposed_value));grid.append(old,change);card.append(grid);
+card.append(e('p','',item.reason||''),e('p','',item.evidence_excerpt||''));try{const u=new URL(item.evidence_url);if(u.protocol==='https:'){const a=e('a','','공개 근거 확인: '+u.hostname);a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';card.append(a)}}catch{}
+container.append(card)}
+}catch(err){container.replaceChildren(e('div','empty','점검 이력을 불러오지 못했습니다.'))}}
+load();
+</script></html>

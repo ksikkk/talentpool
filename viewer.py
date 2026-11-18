@@ -39,6 +39,16 @@ def guard(request: Request):
     if len(request.headers.getlist("host")) != 1:
         raise HTTPException(403,"Invalid Host header")
     expected={f"{a}:8090" for a in _local_bindable_addresses()}
+    # In shared mode, ASGI server may report the accepted socket's actual
+    # local IPv4 even when the listening socket is bound to 0.0.0.0.
+    server=request.scope.get("server") or ()
+    if len(server)>=2:
+        try:
+            local=ipaddress.ip_address(server[0])
+            if local.version==4 and not local.is_unspecified:
+                expected.add(f"{local}:{server[1]}")
+        except ValueError:
+            pass
     if host not in expected:
         raise HTTPException(403,"Use this PC's actual IPv4 address and port")
     origin=request.headers.get("origin")

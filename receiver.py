@@ -174,7 +174,11 @@ def poll_once():
         for n in range(max(1,count-int(os.getenv("POP3_SCAN_LIMIT","100"))+1),count+1):
             try:
                 raw=b"\n".join(server.retr(n)[1])
-                status=import_mail(db,raw,os.environ["HANDOFF_SECRET"],os.environ["TRUSTED_SENDER"])
+                if b"[TALENTPOOL-REFRESH]" in raw[:8192]:
+                    from refresh_receiver import import_refresh_mail
+                    status=import_refresh_mail(db,raw,os.environ["HANDOFF_SECRET"],os.environ["TRUSTED_SENDER"])
+                else:
+                    status=import_mail(db,raw,os.environ["HANDOFF_SECRET"],os.environ["TRUSTED_SENDER"])
                 result[status]+=1
             except Exception as exc:
                 result["rejected"]+=1

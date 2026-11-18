@@ -11,8 +11,8 @@ $obj=@{
   pop3_user=$user
   trusted_sender=$sender
   pop3_host="pop3.samsung.net"
-  pop3_password_dpapi=ConvertFrom-SecureString $password
-  handoff_secret_dpapi=ConvertFrom-SecureString $secret
+  pop3_password_dpapi=(ConvertFrom-SecureString $password)
+  handoff_secret_dpapi=(ConvertFrom-SecureString $secret)
 }
 $target=Join-Path $PSScriptRoot "mail_credentials.local.json"
 $obj | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $target -Encoding UTF8

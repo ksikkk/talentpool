@@ -39,11 +39,10 @@ textarea{resize:vertical;min-height:190px}.actions{display:flex;justify-content:
 <section class="panel"><h2>근황 확인 대상</h2><div id="status" class="sub">불러오는 중…</div><div id="items"></div></section></main>
 <dialog id="composer"><div class="dialog-content">
 <div style="display:flex;justify-content:space-between;align-items:center"><h2>근황 확인 메일 작성</h2><button id="close" type="button">닫기 ×</button></div>
-<p>인재 이메일을 수정하려면 주소 입력 후 ‘인재 이메일 저장’을 누르세요. 메일 발송은 별도의 최종 확인 이후에만 진행됩니다.</p>
+<p>받는 사람 주소는 이번 메일 발송에만 사용되며 인재 DB에는 저장되지 않습니다. 제목과 본문을 검토한 뒤 최종 발송을 승인하세요.</p>
 <form id="form">
 <label>받는 사람 (인재 이메일)<input id="recipient" type="email" maxlength="254" required></label>
-<div class="actions" style="margin-top:7px"><button id="saveRecipient" type="button">인재 이메일 저장</button></div>
-<p id="recipientStatus" class="sub"></p>
+<p class="sub">이 주소는 이번 발송에만 적용되며 인재 프로필 이메일은 변경되지 않습니다.</p>
 <label>제목<input id="subject" maxlength="300" required></label>
 <label>본문<textarea id="body" maxlength="15000" required></textarea></label>
 <label>발송 승인 코드<input id="approval" type="password" autocomplete="off" required placeholder="사내 관리자가 설정한 승인 코드"></label>
@@ -80,27 +79,12 @@ $("saveSettings").onclick=async()=>{
  }catch(e){$("settingsStatus").className="error";$("settingsStatus").textContent=e.message}
  finally{b.disabled=false}
 };
-$("saveRecipient").onclick=async()=>{
- if(!current||busy||attempted)return;
- const recipient=$("recipient").value.trim();
- if(!confirm(current.name+"님의 인재 이메일을 "+recipient+" (으)로 변경·저장하시겠습니까?\n이 동작은 메일을 발송하지 않습니다."))return;
- const button=$("saveRecipient");button.disabled=true;
- try{
- const result=await api("/api/followups/"+current.talent_id+"/recipient",{method:"PATCH",headers:editHeaders,
- body:JSON.stringify({recipient,approval_code:$("approval").value})});
- current.recipient=result.recipient;
- $("recipient").value=result.recipient;
- $("recipientStatus").className="ok";$("recipientStatus").textContent="인재 이메일이 프로필에 저장되었습니다. 발송은 별도로 확인해야 합니다.";
- $("approval").value="";
- }catch(e){$("recipientStatus").className="error";$("recipientStatus").textContent=e.message}
- finally{button.disabled=false}
-};
 async function openDraft(id){
  try{
  const x=await api("/api/followups/"+id+"/draft");
  current=x;busy=false;attempted=false;
  $("recipient").value=x.recipient;$("subject").value=x.subject;$("body").value=x.body;$("approval").value="";
- $("sendStatus").textContent="";$("recipientStatus").textContent="";$("send").disabled=false;
+ $("sendStatus").textContent="";$("send").disabled=false;
  $("composer").showModal();
  }catch(e){alert(e.message)}
 }
@@ -126,13 +110,13 @@ $("close").onclick=close;$("cancel").onclick=close;
 $("composer").addEventListener("cancel",e=>{if(busy)e.preventDefault()});
 $("form").onsubmit=async e=>{
  e.preventDefault();if(!current||busy||attempted)return;
- if($("recipient").value.trim()!==current.recipient){$("sendStatus").className="error";$("sendStatus").textContent="수신자 주소를 먼저 ‘인재 이메일 저장’ 버튼으로 저장하세요.";return}
- if(!confirm(current.name+"님 ("+current.recipient+")에게 메일 API 발송을 요청하시겠습니까?\n발송 요청이 수락되면 접촉 이력에 기록됩니다."))return;
+ const recipient=$("recipient").value.trim();
+ if(!confirm(current.name+"님 ("+recipient+")에게 메일 API 발송을 요청하시겠습니까?\n입력한 주소는 이번 발송에만 사용되며 인재 DB의 이메일은 변경되지 않습니다.\n발송 요청이 수락되면 접촉 이력에 기록됩니다."))return;
  busy=true;attempted=true;$("send").disabled=true;$("sendStatus").className="sub";$("sendStatus").textContent="메일 API 요청 중…";
  try{
  const answer=await api("/api/followups/"+current.talent_id+"/send",
  {method:"POST",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},
- body:JSON.stringify({recipient:$("recipient").value,subject:$("subject").value,body:$("body").value,
+ body:JSON.stringify({recipient,subject:$("subject").value,body:$("body").value,
  approval_code:$("approval").value,request_id:current.request_id})});
  $("sendStatus").className="ok";$("sendStatus").textContent=answer.message+" / 접촉 이력 자동 등록됨";
  await refresh();

@@ -49,14 +49,33 @@ class FollowupTests(unittest.TestCase):
             self.assertEqual(result["Authorization"],"SENSITIVE")
             self.assertEqual(result["System-ID"],"PRIVATE-ID")
 
-    def test_edit_talent_email_from_composer_requires_approval(self):
+    def test_composer_recipient_is_one_time_and_does_not_change_talent_email(self):
         db=database()
-        with self.assertRaises(ValueError):
-            f.save_talent_recipient(db,1,"new@example.org","wrong")
-        self.assertEqual(get_talent(db,1)["email"],"researcher@example.org")
-        result=f.save_talent_recipient(db,1,"new@example.org","testing-long-secret")
-        self.assertEqual(result["recipient"],"new@example.org")
-        self.assertEqual(get_talent(db,1)["email"],"new@example.org")
+        before=get_talent(db,1)["email"]
+        d=f.draft(db,1)
+        one_time="one-time@example.org"
+        payload={"recipient":one_time,"subject":"근황 확인","body":"안녕하세요.",
+                 "request_id":d["request_id"],"approval_code":"testing-long-secret"}
+        with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox",return_value={"status":"api_accepted","message":"API 수락"}) as send:
+            f.send_candidate(db,1,payload)
+            self.assertEqual(send.call_args.args[1],one_time)
+        self.assertEqual(get_talent(db,1)["email"],before)
+        log=db.execute("SELECT memo FROM contact_history").fetchone()[0]
+        self.assertIn(one_time,log)
+        self.assertEqual(db.execute("SELECT recipient FROM followup_send").fetchone()[0],one_time)
+        db.close()
+
+    def test_composer_can_supply_email_when_profile_email_is_empty(self):
+        db=database()
+        db.execute("UPDATE talent SET email='' WHERE id=1")
+        db.commit()
+        d=f.draft(db,1)
+        self.assertEqual(d["recipient"],"")
+        payload={"recipient":"contact@example.org","subject":"안부","body":"연락드립니다",
+                 "request_id":d["request_id"],"approval_code":"testing-long-secret"}
+        with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox",return_value={"status":"api_accepted","message":"API 수락"}):
+            f.send_candidate(db,1,payload)
+        self.assertEqual(get_talent(db,1)["email"],"")
         db.close()
 
     def test_month_end_and_leap_day(self):

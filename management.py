@@ -30,6 +30,7 @@ def database():
         ("next_action", "TEXT NOT NULL DEFAULT ''"),
         ("next_action_date", "TEXT NOT NULL DEFAULT ''"),
         ("last_public_refresh", "TEXT NOT NULL DEFAULT ''"),
+        ("legacy_status", "TEXT NOT NULL DEFAULT ''"),
     ):
         if key not in columns:
             db.execute("ALTER TABLE talent ADD COLUMN " + key + " " + definition)
@@ -49,6 +50,9 @@ def database():
     )""")
     db.execute("""INSERT OR IGNORE INTO talent_field(talent_id,field)
         SELECT id,requested_field FROM talent WHERE requested_field!=''""")
+    db.execute("""UPDATE talent SET legacy_status=status
+        WHERE status NOT IN ('검토중','접촉중','보류','종료')
+          AND legacy_status=''""")
     db.execute("""UPDATE talent SET status='검토중'
         WHERE status NOT IN ('검토중','접촉중','보류','종료')""")
     db.commit()

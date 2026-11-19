@@ -268,3 +268,30 @@ def followup_send(talent_id:int,changes:dict=Body(...),_=Depends(write_guard)):
         try:return send_candidate(db,talent_id,changes)
         except ValueError as exc:raise HTTPException(422,str(exc)) from None
     finally:db.close()
+
+@app.get("/api/followups/settings")
+def followup_settings(_=Depends(guard)):
+    from followup_service import public_mail_settings
+    try:return public_mail_settings()
+    except ValueError as exc:raise HTTPException(422,str(exc)) from None
+
+
+@app.patch("/api/followups/settings")
+def followup_settings_save(changes:dict=Body(...),_=Depends(write_guard)):
+    from followup_service import save_mail_addresses
+    if set(changes)!={"sender","notify_email","approval_code"}:
+        raise HTTPException(422,"메일 설정 필드를 확인하세요.")
+    try:return save_mail_addresses(**changes)
+    except ValueError as exc:raise HTTPException(422,str(exc)) from None
+
+
+@app.patch("/api/followups/{talent_id}/recipient")
+def followup_recipient_save(talent_id:int,changes:dict=Body(...),_=Depends(write_guard)):
+    from followup_service import save_talent_recipient
+    if set(changes)!={"recipient","approval_code"}:
+        raise HTTPException(422,"수신자 저장 필드를 확인하세요.")
+    db=database()
+    try:
+        try:return save_talent_recipient(db,talent_id,**changes)
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+    finally:db.close()

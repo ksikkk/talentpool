@@ -1,7 +1,6 @@
-"""Validate and store external PUBLIC profile-change suggestions; never export internal data.
+"""Validate and auto-apply strongly corroborated PUBLIC profile changes.
 
-These suggestions are review-only. Human approval is needed before modifying
-candidate records, preventing overwrites due to mistaken identities.
+Ambiguous changes are skipped with an internal audit trail. No outbound network calls.
 """
 import hashlib
 import hmac

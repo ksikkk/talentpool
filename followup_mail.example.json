@@ -1,0 +1,9 @@
+{
+  "knox_api_url": "https://openapi.samsung.net/REPLACE_WITH_APPROVED_SEND_ENDPOINT",
+  "Authorization": "REPLACE_WITH_APPROVED_AUTHORIZATION_HEADER",
+  "System-ID": "REPLACE_WITH_APPROVED_SYSTEM_ID",
+  "verify_tls": true,
+  "sender": "sender@samsung.com",
+  "notify_email": "responsible.person@samsung.com",
+  "base_url": "http://192.168.0.10:8090"
+}

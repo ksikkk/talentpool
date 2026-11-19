@@ -54,6 +54,71 @@ def config():
     return c
 
 
+
+def check_approval(code):
+    """Protect all mail configuration and recipient edits with a local approval secret."""
+    secret=os.getenv("FOLLOWUP_APPROVAL_CODE","")
+    if not isinstance(code,str) or len(secret)<10 or not hmac.compare_digest(code,secret):
+        raise ValueError("발송 승인 코드를 확인하세요.")
+
+
+def public_mail_settings():
+    """Never expose Authorization, System-ID, API URL, or other secrets."""
+    existing=CONFIG.exists()
+    try:
+        values=json.loads(CONFIG.read_text(encoding="utf-8-sig")) if existing else {}
+    except (OSError,ValueError):
+        raise ValueError("메일 설정 파일 형식을 확인하세요.") from None
+    return {"configured":existing,
+            "sender":values.get("sender",""),
+            "notify_email":values.get("notify_email",""),
+            "approval_required":True}
+
+
+def save_mail_addresses(sender,notify_email,approval_code):
+    """Edit only two addresses; retain all Knox API secrets in the local file."""
+    check_approval(approval_code)
+    sender=email_address(sender)
+    notify_email=email_address(notify_email)
+    if not sender.lower().endswith("@samsung.com") or not notify_email.lower().endswith("@samsung.com"):
+        raise ValueError("발신자 및 알림 수신자는 승인된 사내 @samsung.com 주소만 사용하세요.")
+    if not CONFIG.exists():
+        raise ValueError("followup_mail.local.json 파일이 없습니다. 예시 파일을 복사하여 사내 Knox API 정보를 먼저 설정하세요.")
+    try:
+        values=json.loads(CONFIG.read_text(encoding="utf-8-sig"))
+    except (OSError,ValueError):
+        raise ValueError("메일 설정 파일을 읽을 수 없습니다.") from None
+    if not isinstance(values,dict):
+        raise ValueError("메일 설정 파일 형식이 올바르지 않습니다.")
+    values["sender"]=sender
+    values["notify_email"]=notify_email
+    # Same-directory atomic replace avoids partial JSON during scanner reads.
+    import tempfile
+    path=None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w",encoding="utf-8",dir=CONFIG.parent,
+                prefix=".followup_mail_",suffix=".tmp",delete=False) as stream:
+            path=Path(stream.name)
+            json.dump(values,stream,ensure_ascii=False,indent=2)
+            stream.write("\n")
+        os.replace(str(path),str(CONFIG))
+    finally:
+        if path is not None and path.exists():
+            path.unlink()
+    return {"configured":True,"sender":sender,"notify_email":notify_email}
+
+
+def save_talent_recipient(db,talent_id,recipient,approval_code):
+    """Explicitly save the confirmed recipient before allowing a mail to send."""
+    check_approval(approval_code)
+    from management import get_talent, edit_talent
+    t=get_talent(db,talent_id)
+    if not t or t["priority"]!="핵심" or t["status"] in ("보류","종료"):
+        raise ValueError("활성 핵심 인재만 메일 주소를 변경할 수 있습니다.")
+    recipient=email_address(recipient)
+    edit_talent(db,talent_id,{"email":recipient})
+    return {"recipient":recipient}
+
 def configure_proxy():
     values=["openapi.samsung.net"]
     for name in ("NO_PROXY", "no_proxy"):
@@ -229,9 +294,7 @@ def draft(db,talent_id):
 def send_candidate(db,talent_id,values):
     from management import get_talent, add_contact
     c=config()
-    approval=os.getenv("FOLLOWUP_APPROVAL_CODE","")
-    if len(approval)<10 or not hmac.compare_digest(str(values.get("approval_code","")),approval):
-        raise ValueError("발송 승인 코드를 확인하세요.")
+    check_approval(values.get("approval_code",""))
     t=get_talent(db,talent_id)
     if not t or t["priority"]!="핵심" or t["status"] in ("보류","종료"):
         raise ValueError("핵심 관리 중인 인재만 발송할 수 있습니다.")

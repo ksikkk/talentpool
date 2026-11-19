@@ -13,6 +13,7 @@ from email.parser import BytesParser
 from email.utils import parseaddr, getaddresses
 
 from receiver import valid_url
+from identity_quality import profile_ids, url_key
 
 ALLOWED_FIELDS={"org","headline","domain","email"}
 
@@ -69,6 +70,9 @@ def parse_refresh_mail(raw, secret, sender):
         name=review.get("name")
         org=review.get("org")
         changes=review.get("changes")
+        sources=review.get("sources",[])
+        if not isinstance(sources,list) or len(sources)>20 or not all(isinstance(u,str) and valid_url(u) for u in sources):
+            raise ValueError("invalid refresh schema")
         if not isinstance(name,str) or not name.strip() or len(name)>150 or not isinstance(org,str) or len(org)>200 or not isinstance(changes,list) or len(changes)>8:
             raise ValueError("invalid refresh schema")
         for item in changes:
@@ -81,7 +85,7 @@ def parse_refresh_mail(raw, secret, sender):
                 raise ValueError("invalid refresh schema")
             if item["field"]=="email" and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+",new):
                 raise ValueError("invalid refresh schema")
-            out.append((batch,name,org,item["field"],old,new,proof,excerpt,reason))
+            out.append((batch,name,org,item["field"],old,new,proof,excerpt,reason,json.dumps(sources,ensure_ascii=False)))
     return batch,out
 
 def import_refresh_mail(db,raw,secret,trusted_sender):
@@ -128,7 +132,7 @@ def import_refresh_mail(db,raw,secret,trusted_sender):
         # Resolve each incoming person once from the ORIGINAL org/name.
         people={}
         for item in items:
-            _,name,org,field,old,new,proof,excerpt,reason=item
+            _,name,org,field,old,new,proof,excerpt,reason,source_json=item
             key=(name,org)
             if key not in people:
                 rows=db.execute("""SELECT * FROM talent
@@ -139,12 +143,19 @@ def import_refresh_mail(db,raw,secret,trusted_sender):
             if field_counts[(name,org,field)]>1:
                 outcome="skipped_conflicting_suggestions"
             elif row is not None:
+                incoming_urls=json.loads(source_json)
+                stored_urls=json.loads(row["sources_json"])
+                incoming_keys={url_key(u) for u in incoming_urls if url_key(u)}
+                stored_keys={url_key(u) for u in stored_urls if url_key(u)}
+                same_identity=bool((incoming_keys & stored_keys) or (profile_ids(incoming_urls)&profile_ids(stored_urls)))
                 # Protect manual edits, stale reports, and unclear evidence.
                 edited=set(json.loads(row["edited_fields_json"] or "[]")) if "edited_fields_json" in row.keys() else set()
                 from identity_quality import kinds
                 quality=kinds(proof)
                 value=row[field] or ""
-                if field in edited:
+                if not same_identity:
+                    outcome="skipped_identity_evidence"
+                elif field in edited:
                     outcome="skipped_manually_curated"
                 elif value.strip().casefold()!=old.strip().casefold():
                     outcome="skipped_stale_or_conflicting"

@@ -115,6 +115,9 @@ const badge=make("span","pill "+(p.priority==="핵심"?"focus":p.priority==="미
 if(p.priority!=="핵심"&&p.priority!=="미분류"&&p.priority!=="높음"&&p.priority!=="보통"&&p.priority!=="낮음")badge.textContent="미분류";
 if(p.priority==="미분류")badge.textContent="미분류";
 top.append(badge);b.append(top);
+const trust=make("div","caption","공개 근거: "+(p.source_quality?.grade||"추가 검증 필요"));
+trust.style.cssText="margin:-6px 0 10px;font-weight:600;color:#426a98";
+b.append(trust);
 for(const [label,value] of [["소속",p.org],["직책",p.headline],["연구분야",p.domain]]){
  const row=make("div","listline");row.append(make("b","",label),make("span","",value||"미등록"));b.append(row)
 }

@@ -22,7 +22,7 @@ textarea{resize:vertical;min-height:190px}.actions{display:flex;justify-content:
 </style></head>
 <body><header><a href="/">← 인재 Pool 관리</a><h1>핵심 인재 접촉 점검</h1></header>
 <main><h2>6개월 접촉 주기</h2>
-<p>최근 접촉 이력이 있는 핵심 인재 중 6개월 이상 경과한 대상자를 표시합니다. 알림이 발송되어도 인재에게 메일이 자동 발송되지는 않습니다. 담당자가 초안을 수정하고 승인 코드를 입력해야 발송됩니다.</p>
+<p>최근 접촉 이력이 있는 핵심 인재 중 6개월 이상 경과한 대상자를 표시합니다. 알림이 발송되어도 인재에게 메일이 자동 발송되지는 않습니다. 담당자가 초안을 수정하고 최종 발송을 확인해야 전송됩니다.</p>
 <section class="panel">
 <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
 <h2>메일 주소 설정</h2><button type="button" id="toggleSettings">주소 설정 열기</button>
@@ -31,7 +31,7 @@ textarea{resize:vertical;min-height:190px}.actions{display:flex;justify-content:
 <div id="settingsPanel" hidden>
 <label>발송자 사내 메일 주소<input id="senderAddress" type="email" autocomplete="off" placeholder="sender@samsung.com"></label>
 <label>6개월 알림 수신 주소<input id="notifyAddress" type="email" autocomplete="off" placeholder="manager@samsung.com"></label>
-<label>설정 변경 승인 코드<input id="settingsApproval" type="password" autocomplete="off"></label>
+
 <div class="actions"><button type="button" class="primary" id="saveSettings">메일 주소 설정 저장</button></div>
 </div>
 <p id="settingsStatus" class="sub"></p>
@@ -45,7 +45,7 @@ textarea{resize:vertical;min-height:190px}.actions{display:flex;justify-content:
 <p class="sub">이 주소는 이번 발송에만 적용되며 인재 프로필 이메일은 변경되지 않습니다.</p>
 <label>제목<input id="subject" maxlength="300" required></label>
 <label>본문<textarea id="body" maxlength="15000" required></textarea></label>
-<label>발송 승인 코드<input id="approval" type="password" autocomplete="off" required placeholder="사내 관리자가 설정한 승인 코드"></label>
+
 <p id="sendStatus" class="sub"></p>
 <div class="actions"><button id="cancel" type="button">취소</button><button class="primary" type="submit" id="send">최종 확인 후 메일 발송</button></div>
 </form></div></dialog>
@@ -65,7 +65,7 @@ async function loadSettings(){
  const x=await api("/api/followups/settings");
  $("senderAddress").value=x.sender||"";
  $("notifyAddress").value=x.notify_email||"";
- $("settingsStatus").textContent=x.configured?"설정 파일 연결됨 · 변경 시 승인 코드 필요":"followup_mail.local.json 파일이 없습니다. 사내 PC의 저장소 폴더에 파일을 먼저 생성하세요.";
+ $("settingsStatus").textContent=x.configured?"설정 파일 연결됨":"followup_mail.local.json 파일이 없습니다. 사내 PC의 저장소 폴더에 파일을 먼저 생성하세요.";
  }catch(e){$("settingsStatus").textContent="설정 확인 오류: "+e.message}
 }
 $("toggleSettings").onclick=()=>{const p=$("settingsPanel");p.hidden=!p.hidden;$("toggleSettings").textContent=p.hidden?"주소 설정 열기":"주소 설정 닫기"};
@@ -73,9 +73,9 @@ $("saveSettings").onclick=async()=>{
  const b=$("saveSettings");b.disabled=true;
  try{
  const result=await api("/api/followups/settings",{method:"PATCH",headers:editHeaders,
- body:JSON.stringify({sender:$("senderAddress").value.trim(),notify_email:$("notifyAddress").value.trim(),approval_code:$("settingsApproval").value})});
+ body:JSON.stringify({sender:$("senderAddress").value.trim(),notify_email:$("notifyAddress").value.trim()})});
  $("settingsStatus").className="ok";$("settingsStatus").textContent="발송자 "+result.sender+" / 알림 수신자 "+result.notify_email+" 저장 완료";
- $("settingsApproval").value="";
+
  }catch(e){$("settingsStatus").className="error";$("settingsStatus").textContent=e.message}
  finally{b.disabled=false}
 };
@@ -83,7 +83,7 @@ async function openDraft(id){
  try{
  const x=await api("/api/followups/"+id+"/draft");
  current=x;busy=false;attempted=false;
- $("recipient").value=x.recipient;$("subject").value=x.subject;$("body").value=x.body;$("approval").value="";
+ $("recipient").value=x.recipient;$("subject").value=x.subject;$("body").value=x.body;
  $("sendStatus").textContent="";$("send").disabled=false;
  $("composer").showModal();
  }catch(e){alert(e.message)}
@@ -117,12 +117,12 @@ $("form").onsubmit=async e=>{
  const answer=await api("/api/followups/"+current.talent_id+"/send",
  {method:"POST",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},
  body:JSON.stringify({recipient,subject:$("subject").value,body:$("body").value,
- approval_code:$("approval").value,request_id:current.request_id})});
+ request_id:current.request_id})});
  $("sendStatus").className="ok";$("sendStatus").textContent=answer.message+" / 접촉 이력 자동 등록됨";
  await refresh();
  }catch(err){
  $("sendStatus").className="error";$("sendStatus").textContent=err.message+"\n전송 여부를 사내 메일함에서 확인하고 새 작성창을 열어주세요.";
- }finally{busy=false;$("approval").value=""}
+ }finally{busy=false}
 };
 loadSettings();
 refresh().then(()=>{const id=Number(new URLSearchParams(location.search).get("talent_id"));if(Number.isSafeInteger(id)&&id>0)openDraft(id)});

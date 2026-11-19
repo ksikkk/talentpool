@@ -139,6 +139,7 @@ function clearDetail(){document.querySelector(".history-modal")?.remove();select
 async function choose(id,force=false){if(selected===id&&!force){clearDetail();return}document.querySelector(".history-modal")?.remove();selected=id;editing=false;list();$("workspace").classList.add("expanded");$("closeDetail").classList.remove("hidden");const root=$("details");root.replaceChildren();
 try{const t=await api("/api/talents/"+id);if(selected!==id)return;
 const head=make("div","detailhead");head.append(make("h2","",t.name));root.append(head);
+if(t.last_public_refresh){const line=make("div","caption","최종 사내 공개정보 자동 반영: "+t.last_public_refresh.slice(0,10));line.style.marginBottom="12px";root.append(line)}
 const evidence=make("div","evidenceSummary");
 evidence.style.cssText="background:#f2f7fd;border:1px solid #dce8f6;border-radius:11px;padding:12px;margin-bottom:18px;font-size:13px";
 evidence.append(make("strong","","공개 근거: "+(t.source_quality?.grade||"추가 검증 필요")));

@@ -1,13 +1,13 @@
 """One-off, operator-approved internal candidate mail.
 
-Uses the existing Knox adapter, approval secret and contact history. A temporary
+Uses the existing Knox adapter, explicit confirmation and contact history. A temporary
 recipient is NEVER written to the candidate's profile.
 """
 import html
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from followup_service import check_approval, config, email_address, send_knox, today
+from followup_service import config, email_address, send_knox, today
 from management import add_contact, get_talent, list_talents
 
 def available(db, q):
@@ -52,7 +52,6 @@ def send(db, talent_id, values):
     """A single explicit send attempt; 2xx -> contact history, unknown -> no contact."""
     if not isinstance(values,dict):
         raise ValueError("메일 발송 항목을 확인하세요.")
-    check_approval(values.get("approval_code",""))
     person=get_talent(db,talent_id)
     if not person:
         raise ValueError("선택한 인재가 존재하지 않습니다.")

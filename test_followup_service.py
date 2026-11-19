@@ -14,8 +14,7 @@ class FollowupTests(unittest.TestCase):
         self.folder=tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.patcher=patch.dict("os.environ",{"INTERNAL_DB_PATH":str(Path(self.folder.name)/"db.sqlite"),
-                                             "FOLLOWUP_NOTIFY_ENABLED":"0",
-                                             "FOLLOWUP_APPROVAL_CODE":"testing-long-secret"})
+                                             "FOLLOWUP_NOTIFY_ENABLED":"0"})
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
         db=database()
@@ -40,10 +39,10 @@ class FollowupTests(unittest.TestCase):
             self.assertNotIn("Authorization",shown)
             self.assertNotIn("System-ID",shown)
             with self.assertRaises(ValueError):
-                f.save_mail_addresses("new@samsung.com","alert@samsung.com","wrong")
+                f.save_mail_addresses("bad","alert@samsung.com")
             with self.assertRaises(ValueError):
-                f.save_mail_addresses("outsider@example.org","alert@samsung.com","testing-long-secret")
-            updated=f.save_mail_addresses("new@samsung.com","alert@samsung.com","testing-long-secret")
+                f.save_mail_addresses("outsider@example.org","alert@samsung.com")
+            updated=f.save_mail_addresses("new@samsung.com","alert@samsung.com")
             self.assertEqual(updated["sender"],"new@samsung.com")
             result=json.loads(config_path.read_text(encoding="utf-8"))
             self.assertEqual(result["Authorization"],"SENSITIVE")
@@ -55,7 +54,7 @@ class FollowupTests(unittest.TestCase):
         d=f.draft(db,1)
         one_time="one-time@example.org"
         payload={"recipient":one_time,"subject":"근황 확인","body":"안녕하세요.",
-                 "request_id":d["request_id"],"approval_code":"testing-long-secret"}
+                 "request_id":d["request_id"]}
         with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox",return_value={"status":"api_accepted","message":"API 수락"}) as send:
             f.send_candidate(db,1,payload)
             self.assertEqual(send.call_args.args[1],one_time)
@@ -72,7 +71,7 @@ class FollowupTests(unittest.TestCase):
         d=f.draft(db,1)
         self.assertEqual(d["recipient"],"")
         payload={"recipient":"contact@example.org","subject":"안부","body":"연락드립니다",
-                 "request_id":d["request_id"],"approval_code":"testing-long-secret"}
+                 "request_id":d["request_id"]}
         with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox",return_value={"status":"api_accepted","message":"API 수락"}):
             f.send_candidate(db,1,payload)
         self.assertEqual(get_talent(db,1)["email"],"")
@@ -130,7 +129,7 @@ class FollowupTests(unittest.TestCase):
         c={"sender":"admin@samsung.com"}
         d=f.draft(db,1)
         payload={"recipient":d["recipient"],"subject":"근황 확인","body":"안녕하세요.",
-                 "request_id":d["request_id"],"approval_code":"testing-long-secret"}
+                 "request_id":d["request_id"]}
         with patch.object(f,"config",return_value=c),patch.object(f,"send_knox",return_value={"status":"api_accepted","message":"API 수락"}) as send:
             f.send_candidate(db,1,payload)
             with self.assertRaisesRegex(ValueError,"이미 발송 시도"):
@@ -140,21 +139,22 @@ class FollowupTests(unittest.TestCase):
         self.assertEqual(get_talent(db,1)["status"],"접촉중")
         db.close()
 
-    def test_wrong_approval_never_sends(self):
+    def test_no_approval_code_needed_for_followup_email(self):
         db=database()
         d=f.draft(db,1)
-        with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox") as send:
-            with self.assertRaisesRegex(ValueError,"승인 코드"):
-                f.send_candidate(db,1,{"recipient":d["recipient"],"subject":"안부","body":"내용",
-                                           "request_id":d["request_id"],"approval_code":"wrong"})
-            send.assert_not_called()
+        payload={"recipient":d["recipient"],"subject":"근황 확인","body":"안녕하세요.",
+                 "request_id":d["request_id"]}
+        with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox",return_value={"status":"api_accepted","message":"API 수락"}) as send:
+            f.send_candidate(db,1,payload)
+            self.assertEqual(send.call_count,1)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM contact_history").fetchone()[0],1)
         db.close()
 
     def test_unsure_outcome_is_not_retried_or_logged_as_contact(self):
         db=database()
         d=f.draft(db,1)
         p={"recipient":d["recipient"],"subject":"안부","body":"내용",
-           "request_id":d["request_id"],"approval_code":"testing-long-secret"}
+           "request_id":d["request_id"]}
         with patch.object(f,"config",return_value={"sender":"admin@samsung.com"}),patch.object(f,"send_knox",side_effect=ValueError("timeout")) as send:
             with self.assertRaises(ValueError):f.send_candidate(db,1,p)
             with self.assertRaisesRegex(ValueError,"이미 발송 시도"):f.send_candidate(db,1,p)

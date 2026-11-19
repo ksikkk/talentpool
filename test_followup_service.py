@@ -60,7 +60,9 @@ class FollowupTests(unittest.TestCase):
             self.assertEqual(send.call_args.args[1],one_time)
         self.assertEqual(get_talent(db,1)["email"],before)
         log=db.execute("SELECT memo FROM contact_history").fetchone()[0]
-        self.assertIn(one_time,log)
+        self.assertEqual(log,"안녕하세요.")
+        row=db.execute("SELECT contact_at,channel,subject,memo FROM contact_history").fetchone()
+        self.assertEqual((row["channel"],row["subject"],row["memo"]),("이메일","근황 확인","안녕하세요."))
         self.assertEqual(db.execute("SELECT recipient FROM followup_send").fetchone()[0],one_time)
         db.close()
 

@@ -15,7 +15,7 @@ SENDER="approved@example.org"
 def make_refresh(batch="a"*32, tamper=False, proof="https://engineering.example.ac.kr/profile",old="가상대학"):
     obj={"schema_version":2,"kind":"talentpool_refresh","batch_id":batch,
          "sent_at":"2026-11-18T00:00:00Z",
-         "reviews":[{"name":"가상 연구자","org":"가상대학","sources":["https://example.org"],
+         "reviews":[{"name":"가상 연구자","org":"가상대학","sources":["https://engineering.example.ac.kr/profile"],
                      "identity_key":"fake","status":"changes_found","summary":"테스트",
                      "changes":[{"field":"org","old":old,"new":"신규대학",
                      "evidence_url":proof,

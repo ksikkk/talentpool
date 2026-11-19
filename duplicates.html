@@ -1,0 +1,18 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>중복 후보 검토</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f5f7fb;color:#18304a;font:15px/1.6 system-ui,"Malgun Gothic",sans-serif}header{background:white;border-bottom:1px solid #e2e9f4;padding:20px max(22px,calc((100vw - 1050px)/2));display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:22px}main{max-width:1050px;margin:24px auto;padding:0 20px}a{color:#295e9e;overflow-wrap:anywhere}article{background:white;border:1px solid #e1e9f3;border-radius:16px;padding:23px;margin:14px 0;box-shadow:0 4px 12px #2545650a}h2{font-size:18px;margin:0 0 10px}p{margin:8px 0;color:#53667c}.data{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}.pane{background:#f5f8fd;border-radius:12px;padding:15px}button{font:inherit;border:1px solid #bfd0e1;border-radius:9px;background:white;color:#205180;cursor:pointer;padding:10px 14px;margin:4px}button.primary{background:#205992;color:#fff}small{color:#7587a0}@media(max-width:700px){.data{grid-template-columns:1fr}}</style>
+<header><h1>중복 인재 검토</h1><a href="/">인재 Pool 돌아가기</a></header>
+<main><p>같은 이름·소속 또는 연구자 프로필 식별자가 충돌한 후보입니다. 근거 원문과 동일 인물 여부를 확인한 뒤 처리하세요. 자동 병합은 수행하지 않았습니다.</p><div id="list">불러오는 중…</div></main>
+<script>
+const root=document.getElementById('list');const node=(tag,text,cls)=>{const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(cls)x.className=cls;return x};
+async function request(path,options={}){const r=await fetch(path,{credentials:'same-origin',...options});if(!r.ok)throw Error('요청 실패 ('+r.status+')');return r.json()}
+async function load(){try{const d=await request('/api/duplicate-reviews');root.replaceChildren();if(!d.items.length){root.append(node('p','현재 중복 검토 대기 후보가 없습니다.'));return}
+for(const r of d.items){const item=node('article');item.append(node('h2',r.name+' · '+r.org),node('small','확인 사유: '+r.reason));
+const grid=node('div',undefined,'data'),left=node('div',undefined,'pane'),right=node('div',undefined,'pane');
+left.append(node('strong','새로 수신한 후보'),node('p',(r.candidate.headline||'')+' / '+(r.candidate.domain||'')),node('p',r.candidate.summary||''));
+for(const url of r.candidate.sources||[]){try{const u=new URL(url);if(u.protocol==='https:'){const a=node('a',u.hostname+' · 공개 출처');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';left.append(a,node('div'))}}catch{}}
+right.append(node('strong','기존 저장 후보'),node('p','인재 ID: '+r.matched_talent_id),node('p',r.existing_name+' / '+r.existing_org));
+grid.append(left,right);item.append(grid);
+for(const [label,value] of [['기존 인재와 동일 — 신규 등록 생략','same'],['다른 인재 — 별도로 등록','distinct']]){const b=node('button',label,value==='distinct'?'primary':'');b.onclick=async()=>{if(!confirm('공개 출처와 동일 인물 여부를 확인하셨나요?\n'+label))return;b.disabled=true;try{await request('/api/duplicate-reviews/'+r.id,{method:'POST',headers:{'Content-Type':'application/json','X-Internal-Action':'1'},body:JSON.stringify({decision:value})});load()}catch(e){alert(e.message);b.disabled=false}};item.append(b)}
+root.append(item)}}catch(e){root.textContent='검토 목록을 불러오지 못했습니다: '+e.message}}
+load();
+</script></html>

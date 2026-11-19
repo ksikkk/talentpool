@@ -1,6 +1,6 @@
 """Talent Pool shared intranet launcher, following ksikkk/people serve --share-edit.
 
-Use python app.py. Never sends internal data outside this PC.
+Use python app.py. Optional follow-up mail sends only with local Knox configuration.
 Company firewall and networking still determine who can connect.
 """
 import os

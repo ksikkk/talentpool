@@ -285,3 +285,44 @@ def followup_settings_save(changes:dict=Body(...),_=Depends(write_guard)):
     except ValueError as exc:raise HTTPException(422,str(exc)) from None
 
 
+
+@app.get("/mail",response_class=HTMLResponse)
+def mail_compose_page(_=Depends(guard)):
+    return Path(__file__).with_name("mail_compose.html").read_text(encoding="utf-8")
+
+
+@app.get("/api/mail/recipients")
+def mail_recipient_search(q:str=Query("",max_length=100),_=Depends(guard)):
+    from direct_mail import available
+    db=database()
+    try:
+        try:return {"items":available(db,q)}
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+    finally:db.close()
+
+
+@app.get("/api/mail/draft/{talent_id}")
+def general_mail_draft(talent_id:int,_=Depends(guard)):
+    from direct_mail import draft
+    from followup_service import public_mail_settings
+    db=database()
+    try:
+        try:
+            details=draft(db,talent_id)
+            details["sender"]=public_mail_settings()["sender"]
+            return details
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+    finally:db.close()
+
+
+@app.post("/api/mail/send")
+def general_mail_send(changes:dict=Body(...),_=Depends(write_guard)):
+    from direct_mail import send
+    required={"talent_id","recipient","subject","body","approval_code","request_id"}
+    if set(changes)!=required or type(changes["talent_id"]) is not int or changes["talent_id"]<1:
+        raise HTTPException(422,"메일 발송 항목을 확인하세요.")
+    db=database()
+    try:
+        try:return send(db,changes["talent_id"],changes)
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+    finally:db.close()

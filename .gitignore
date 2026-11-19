@@ -7,3 +7,5 @@ __pycache__/
 
 mail_credentials.local.json
 *.local.json
+
+followup_mail.local.json

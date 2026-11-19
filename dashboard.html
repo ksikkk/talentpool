@@ -24,7 +24,13 @@ button.ghost{background:white;border:1px solid #d9e1ed;border-radius:10px;paddin
 .domainlist{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px}
 .domaincard{background:#f7f9fd;border:1px solid #e6edf6;border-radius:12px;text-align:left;padding:12px 13px;color:#28415f}
 .domaincard:hover,.domaincard.on{border-color:#3e73b2;background:#eaf3ff}
-.domaincard .bar{height:6px;border-radius:9px;background:#e4ebf5;overflow:hidden;margin-top:8px}
+.domain-all{background:#173a68!important;color:white!important;border-color:#173a68!important;box-shadow:0 6px 16px #173a6830}
+.domain-all .domainline{font-size:15px!important}
+.domain-all.on{outline:2px solid #90bbf0;outline-offset:2px}
+.domaincard:not(.domain-all){background:#f3f8ff}
+.domaincard:not(.domain-all).on{background:#e4efff;border-color:#3976b6}
+.domaincard:not(.domain-all) .domaincount{font-size:17px;font-weight:800}
+.domaincard:hover{transform:translateY(-1px)}
 .domaincard .bar span{display:block;height:100%;background:#477db8}
 .domaincard .domainline{display:flex;justify-content:space-between;gap:10px;font-weight:600;font-size:13px}
 .domaincard .domaincount{color:#3a669b;font-variant-numeric:tabular-nums}
@@ -69,8 +75,15 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 .profile-buttons{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 button.danger{background:#fff2f2;border:1px solid #f0c9c9;color:#a22929;border-radius:9px;padding:9px 13px}
 .field label{margin-bottom:2px}
+
+.manage-panel{background:#f5f8fd;border:1px solid #d8e4f1;border-radius:13px;padding:16px;margin:12px 0 18px}
+.manage-panel .profilegrid{margin-top:10px}
+.history-modal{position:fixed;inset:0;z-index:80;background:#12233c9b;display:flex;align-items:center;justify-content:center;padding:16px}
+.history-card{width:min(640px,100%);max-height:90vh;overflow:auto;background:white;border-radius:18px;padding:22px;box-shadow:0 18px 75px #0003}
+.history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+@media(max-width:600px){.history-card{max-height:96vh;padding:16px}.profile-buttons{gap:5px}.profile-buttons button{padding:7px 10px}}
 </style></head><body>
-<header><h1>인재 Pool 관리</h1><nav style="display:flex;gap:18px;flex-wrap:wrap"><a href="/duplicate-reviews" style="color:#a2641b;text-decoration:none;font-weight:650">중복 후보 검토</a><a href="/monthly-reviews" style="color:#285f9e;text-decoration:none;font-weight:650">월간 정보 점검</a></nav></header>
+<header><h1>인재 Pool 관리</h1><nav style="display:flex;gap:18px;flex-wrap:wrap"><a href="/duplicate-reviews" style="color:#a2641b;text-decoration:none;font-weight:650">중복 후보 검토</a></nav></header>
 <main><div class="metrics">
 <button class="metric on" data-metric="all"><span>전체 등록 인재</span><span class="num" id="total">—</span><span class="sub">전체 후보 보기</span></button>
 <button class="metric" data-metric="core"><span>핵심 관리</span><span class="num" id="core">—</span><span class="sub">관심도 ‘핵심’</span></button>
@@ -96,11 +109,11 @@ function domains(){
  for(const key of new Set(fields.length?fields:["미분류"])){counts.set(key,(counts.get(key)||0)+1)}
 }
  const ordered=[...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"ko"));
- const max=Math.max(1,...ordered.map(x=>x[1]));const root=$("domainList");root.replaceChildren();
- const all=make("button","domaincard"+(!domainFilter?" on":""));all.append(make("div","domainline","전체 분야 · "+people.length+"명"));
+ const root=$("domainList");root.replaceChildren();
+ const all=make("button","domaincard domain-all"+(!domainFilter?" on":""));all.append(make("div","domainline","전체 분야 · "+people.length+"명"));
  all.onclick=()=>{domainFilter="";domains();clearDetail();list()};root.append(all);
  for(const [name,count] of ordered){const b=make("button","domaincard"+(domainFilter===name?" on":"")),line=make("div","domainline");
- line.append(make("span","",name),make("span","domaincount",count+"명"));const bar=make("div","bar"),fill=make("span");fill.style.width=(count/max*100)+"%";bar.append(fill);b.append(line,bar);
+ line.append(make("span","",name),make("span","domaincount",count+"명"));b.append(line);
  b.onclick=()=>{domainFilter=domainFilter===name?"":name;domains();clearDetail();list()};root.append(b)}
  $("domainCaption").textContent=ordered.length+"개 요청 분야 · 클릭하여 필터링";
 }
@@ -122,8 +135,8 @@ for(const [label,value] of [["소속",p.org],["직책",p.headline],["연구분�
  const row=make("div","listline");row.append(make("b","",label),make("span","",value||"미등록"));b.append(row)
 }
 b.onclick=e=>{e.stopPropagation();choose(p.id)};root.append(b)}}
-function clearDetail(){selected=null;editing=false;$("details").replaceChildren();$("workspace").classList.remove("expanded");$("closeDetail").classList.add("hidden");list()}
-async function choose(id,force=false){if(selected===id&&!force){clearDetail();return}selected=id;editing=false;list();$("workspace").classList.add("expanded");$("closeDetail").classList.remove("hidden");const root=$("details");root.replaceChildren();
+function clearDetail(){document.querySelector(".history-modal")?.remove();selected=null;editing=false;$("details").replaceChildren();$("workspace").classList.remove("expanded");$("closeDetail").classList.add("hidden");list()}
+async function choose(id,force=false){if(selected===id&&!force){clearDetail();return}document.querySelector(".history-modal")?.remove();selected=id;editing=false;list();$("workspace").classList.add("expanded");$("closeDetail").classList.remove("hidden");const root=$("details");root.replaceChildren();
 try{const t=await api("/api/talents/"+id);if(selected!==id)return;
 const head=make("div","detailhead");head.append(make("h2","",t.name));root.append(head);
 const evidence=make("div","evidenceSummary");
@@ -140,15 +153,25 @@ const f=profileField(field(label,kind,t[key]),t[key]);if(kind==="textarea")f.box
 const src=make("details","section");const summary=make("summary","","출처 보기");src.append(summary);
 const urls=field("공개 출처 URL (한 줄에 하나씩)","textarea",(t.sources||[]).join("\n"));urls.box.classList.add("full");urls.ctrl.classList.add("sourceslist");profileField(urls,(t.sources||[]).join("\n"));src.append(urls.box);
 const note=make("p","note","수정한 공개 프로필 정보는 이후 메일 재수신 시 유지됩니다.");src.append(note);root.append(grid,src);
-const section=make("details","section");section.append(make("summary","","사내 관리 정보"));const internal=make("div","profilegrid");
-const status=field("관리 상태","select",t.status,["검토대기","검토중","관심","접촉예정","접촉중","보류","종료"]);
+const section=make("div","manage-panel hidden");section.append(make("h3","","사내 관리 정보"));const internal=make("div","profilegrid");
+const status=field("관리 상태","select",["검토중","접촉중","보류","종료"].includes(t.status)?t.status:"검토중",["검토중","접촉중","보류","종료"]);
 const priority=field("관심도","select",t.priority,["미분류","핵심","높음","보통","낮음"]);
-const notes=field("내부 관리 메모","textarea",t.internal_notes);notes.box.classList.add("full");profileField(status,t.status);profileField(priority,t.priority);profileField(notes,t.internal_notes);internal.append(status.box,priority.box,notes.box);section.append(internal);root.append(section);
+const notes=field("내부 관리 메모","textarea",t.internal_notes);notes.box.classList.add("full");internal.append(status.box,priority.box,notes.box);section.append(internal);root.append(section);
 const actions=make("div","profile-buttons"),edit=make("button","ghost","수정"),save=make("button","primary","수정 완료"),cancelEdit=make("button","ghost","취소"),del=make("button","danger","삭제"),message=make("span","message");
-const editControls=[...Object.values(input),urls.ctrl,status.ctrl,priority.ctrl,notes.ctrl];
+const editControls=[...Object.values(input),urls.ctrl];
 function editMode(on){editing=on;root.classList.toggle("is-editing",on);editControls.forEach(c=>c.disabled=!on);edit.classList.toggle("hidden",on);save.classList.toggle("hidden",!on);cancelEdit.classList.toggle("hidden",!on);del.classList.toggle("hidden",on);summary.textContent=on?"출처 펼치기 · 수정":"출처 보기"}
 edit.onclick=()=>editMode(true);cancelEdit.onclick=()=>choose(id,true);
-actions.append(edit,save,cancelEdit,del);$("profileButtons").replaceChildren(actions,$("closeDetail"));root.append(message);editMode(false);
+const manageButton=make("button","ghost","사내 관리 ▼");
+const historyButton=make("button","ghost","접촉 이력");
+manageButton.onclick=()=>{section.classList.toggle("hidden");};
+const manageSave=make("button","primary","관리 정보 저장"),manageMessage=make("span","message");
+manageSave.onclick=async()=>{manageSave.disabled=true;try{
+ await api("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify({status:status.ctrl.value,priority:priority.ctrl.value,internal_notes:notes.ctrl.value})});
+ manageMessage.textContent="저장했습니다.";section.classList.add("hidden");await loadList(false);
+}catch(e){manageMessage.textContent="저장 실패: "+e.message}finally{manageSave.disabled=false}};
+section.append(manageSave,manageMessage);
+actions.append(manageButton,historyButton,edit,save,cancelEdit,del);
+$("profileButtons").replaceChildren(actions,$("closeDetail"));root.append(message);editMode(false);
 del.onclick=async()=>{if(!confirm(t.name+" 인재를 삭제하시겠습니까?\\n삭제하면 목록에서 제외되며 접촉 이력은 복구를 위해 보존됩니다."))return;
  del.disabled=true;try{await api("/api/talents/"+id,{method:"DELETE",headers:{"X-Internal-Action":"1"}});clearDetail();await loadList(false)}catch(e){message.textContent="삭제 실패: "+e.message;del.disabled=false}};
 
@@ -156,13 +179,21 @@ save.onclick=async()=>{save.disabled=true;message.textContent="";try{
 const changes={};for(const [key,ctrl] of Object.entries(input)){if(ctrl.value.trim()!==(t[key]||""))changes[key]=ctrl.value.trim()}
 const newSources=urls.ctrl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 if(JSON.stringify(newSources)!==JSON.stringify(t.sources||[]))changes.sources=newSources;
-changes.status=status.ctrl.value;changes.priority=priority.ctrl.value;changes.internal_notes=notes.ctrl.value;
+
 const res=await api("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify(changes)});
 message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name;for(const f of editFields)f.view.textContent=f.ctrl.value||"—";editMode(false)
 }catch(e){message.className="message error";message.textContent="저장 실패: "+e.message}finally{save.disabled=false}};
-const historySection=make("details","section");historySection.append(make("summary","","접촉 이력"));const history=make("div");const add=make("button","ghost","＋ 접촉 이력 추가");historySection.append(add,history);root.append(historySection);
+const historySection=make("div","history-modal hidden");
+const historyCard=make("div","history-card"),historyHead=make("div","history-header");
+historyHead.append(make("h3","",t.name+" · 접촉 이력"));
+const historyClose=make("button","ghost","닫기 ×");historyHead.append(historyClose);
+historyCard.append(historyHead);historySection.append(historyCard);document.body.append(historySection);
+const closeHistory=()=>historySection.classList.add("hidden");
+historyClose.onclick=closeHistory;historySection.onclick=e=>{if(e.target===historySection)closeHistory()};
+historyButton.onclick=()=>historySection.classList.remove("hidden");
+const history=make("div");const add=make("button","ghost","＋ 접촉 이력 추가");historyCard.append(add,history);
 const entry=make("div","profilegrid hidden"),day=field("접촉일","input",""),channel=field("접촉 방식","select","이메일",["이메일","전화","미팅","기타"]),subject=field("주제","input",""),memo=field("내용","textarea","");day.ctrl.type="date";day.ctrl.value=new Date().toLocaleDateString("sv-SE");memo.box.classList.add("full");entry.append(day.box,channel.box,subject.box,memo.box);
-const addActions=make("div","actions"),submit=make("button","primary","이력 저장"),cancel=make("button","ghost","취소"),notice=make("span","message");addActions.append(submit,cancel,notice);entry.append(addActions);historySection.insertBefore(entry,history);
+const addActions=make("div","actions"),submit=make("button","primary","이력 저장"),cancel=make("button","ghost","취소"),notice=make("span","message");addActions.append(submit,cancel,notice);entry.append(addActions);historyCard.insertBefore(entry,history);
 add.onclick=()=>{entry.classList.remove("hidden");add.classList.add("hidden")};cancel.onclick=()=>{entry.classList.add("hidden");add.classList.remove("hidden")};
 async function loadHistory(){const d=await api("/api/talents/"+id+"/contacts");if(selected!==id)return;history.replaceChildren();if(!d.items.length)history.append(make("p","note","접촉 이력이 없습니다."));for(const c of d.items){const item=make("div","contact");item.append(make("strong","",c.contact_at+" · "+c.channel+" · "+c.subject),make("p","",c.memo||""));history.append(item)}}
 submit.onclick=async()=>{submit.disabled=true;notice.textContent="";try{await api("/api/talents/"+id+"/contacts",{method:"POST",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify({contact_at:day.ctrl.value,channel:channel.ctrl.value,subject:subject.ctrl.value,memo:memo.ctrl.value})});await loadHistory();await loadList(false);entry.classList.add("hidden");add.classList.remove("hidden");subject.ctrl.value="";memo.ctrl.value=""}catch(e){notice.className="message error";notice.textContent=e.message}finally{submit.disabled=false}};
@@ -171,6 +202,6 @@ await loadHistory();
 async function loadList(reset=true){try{const d=await api("/api/talents?limit=500");people=d.items;stats();if(reset&&selected&&!people.some(x=>x.id===selected))clearDetail();domains();list()}catch(e){$("list").replaceChildren(make("div","empty","목록 조회에 실패했습니다."))}}
 $("closeDetail").onclick=clearDetail;$("search").oninput=list;$("reset").onclick=()=>{$("search").value="";metric="all";domainFilter="";domains();clearDetail();document.querySelectorAll(".metric").forEach(b=>b.classList.toggle("on",b.dataset.metric==="all"));list()};
 document.querySelectorAll(".metric").forEach(b=>b.onclick=()=>{metric=b.dataset.metric;document.querySelectorAll(".metric").forEach(m=>m.classList.toggle("on",m===b));if(selected&&((metric==="core"&&people.find(p=>p.id===selected)?.priority!=="핵심")||(metric==="contact"&&!people.find(p=>p.id===selected)?.has_contact)))clearDetail();list()});
-document.addEventListener("click",e=>{if(selected&&!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar,.domains"))clearDetail()});
+document.addEventListener("click",e=>{if(selected&&!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar,.domains,.history-modal"))clearDetail()});
 loadList();
 </script></body></html>

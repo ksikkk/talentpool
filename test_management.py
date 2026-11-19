@@ -31,10 +31,10 @@ class ManagementTests(unittest.TestCase):
 
     def test_edit_and_filter(self):
         db=database()
-        result=edit_talent(db,1,{"status":"접촉예정","priority":"핵심","email":"candidate@example.org","internal_notes":"내부 검토"})
+        result=edit_talent(db,1,{"status":"접촉중","priority":"핵심","email":"candidate@example.org","internal_notes":"내부 검토"})
         self.assertEqual(result["priority"],"핵심")
         self.assertEqual(result["email"],"candidate@example.org")
-        self.assertEqual(len(list_talents(db,status="접촉예정",priority="핵심")),1)
+        self.assertEqual(len(list_talents(db,status="접촉중",priority="핵심")),1)
         with self.assertRaises(ValueError):
             edit_talent(db,1,{"name":""})
         db.close()

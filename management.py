@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from receiver import connect_db
 from identity_quality import evidence_quality
 
-STATUSES = ("검토대기", "검토중", "관심", "접촉예정", "접촉중", "보류", "종료")
+STATUSES = ("검토중", "접촉중", "보류", "종료")
 PRIORITIES = ("미분류", "핵심", "높음", "보통", "낮음")
 CONTACT_TYPES = ("이메일", "전화", "미팅", "기타")
 
@@ -29,6 +29,7 @@ def database():
         ("internal_notes", "TEXT NOT NULL DEFAULT ''"),
         ("next_action", "TEXT NOT NULL DEFAULT ''"),
         ("next_action_date", "TEXT NOT NULL DEFAULT ''"),
+        ("last_public_refresh", "TEXT NOT NULL DEFAULT ''"),
     ):
         if key not in columns:
             db.execute("ALTER TABLE talent ADD COLUMN " + key + " " + definition)
@@ -48,6 +49,8 @@ def database():
     )""")
     db.execute("""INSERT OR IGNORE INTO talent_field(talent_id,field)
         SELECT id,requested_field FROM talent WHERE requested_field!=''""")
+    db.execute("""UPDATE talent SET status='검토중'
+        WHERE status NOT IN ('검토중','접촉중','보류','종료')""")
     db.commit()
     return db
 

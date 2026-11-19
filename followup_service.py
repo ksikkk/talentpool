@@ -48,8 +48,9 @@ def config():
     url = urlsplit(c["knox_api_url"])
     if url.scheme != "https" or not url.hostname or url.username or url.password:
         raise ValueError("Knox 메일 API는 HTTPS 주소를 입력하세요.")
-    if c.get("verify_tls", True) is not True and not (isinstance(c.get("verify_tls"), str) and c["verify_tls"]):
-        raise ValueError("verify_tls는 true 또는 승인된 CA 인증서 경로만 허용합니다.")
+    verify=c.get("verify_tls",True)
+    if type(verify) is not bool and not (isinstance(verify,str) and bool(verify.strip())):
+        raise ValueError("verify_tls는 true, false 또는 CA 인증서 경로만 허용합니다.")
     return c
 
 

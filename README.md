@@ -490,3 +490,14 @@ notepad .\followup_mail.local.json
 - **보안 주의:** 현재 이 웹 시스템에는 사용자 로그인과 HTTPS가 없습니다. 승인 코드 제거로 **사내 웹 주소에 접속할 수 있는 누구나 메일을 발송하거나 발송자 주소 설정을 변경할 수 있습니다.** 회사에서 실제 인재에게 발송하려면 사내 인증, 권한 제어, HTTPS를 우선 적용하거나 사내망 방화벽으로 접속자를 제한하세요.
 
 반영: 서버를 종료한 뒤 `git pull origin main` → `python app.py` → 브라우저 `Ctrl+F5`.
+
+
+### Knox 메일 API TLS 인증서 검증 설정
+
+사내 승인된 Knox 메일 API 환경에 맞춰 `followup_mail.local.json`의 `verify_tls` 값은 `true`, `false`, 또는 회사 CA 인증서 경로 문자열을 지원합니다.
+
+```json
+"verify_tls": false
+```
+
+**주의:** `false`는 HTTPS의 서버 인증서 검증을 끄므로 중간자 공격이나 위조 서버를 감지하지 못할 수 있습니다. 사내 IT/보안 담당자에게 허용 범위를 확인하고 가능한 경우 승인된 CA 인증서 경로를 사용하는 것이 안전합니다. 이 설정은 웹 화면의 HTTPS나 사용자 권한과는 별개입니다. 변경 후 `python app.py`를 재시작해 주세요.

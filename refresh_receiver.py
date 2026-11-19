@@ -96,8 +96,14 @@ def import_refresh_mail(db,raw,secret,trusted_sender):
     create_refresh_table(db)
     # Keep old schema as a migration path and preserve legacy records.
     cols={r["name"] for r in db.execute("PRAGMA table_info(talent)")}
-    if "last_public_refresh" not in cols:
-        db.execute("ALTER TABLE talent ADD COLUMN last_public_refresh TEXT NOT NULL DEFAULT ''")
+    for key,definition in (
+        ("last_public_refresh","TEXT NOT NULL DEFAULT ''"),
+        ("deleted_at","TEXT"),
+        ("edited_fields_json","TEXT NOT NULL DEFAULT '[]'"),
+        ("email_source","TEXT NOT NULL DEFAULT ''"),
+    ):
+        if key not in cols:
+            db.execute("ALTER TABLE talent ADD COLUMN "+key+" "+definition)
     db.execute("""CREATE TABLE IF NOT EXISTS applied_refresh (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         batch_id TEXT NOT NULL,

@@ -96,6 +96,21 @@ button.danger{background:#fff2f2;border:1px solid #f0c9c9;color:#a22929;border-r
 .history-card{width:min(640px,100%);max-height:90vh;overflow:auto;background:white;border-radius:18px;padding:22px;box-shadow:0 18px 75px #0003}
 .history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 @media(max-width:600px){.history-card{max-height:96vh;padding:16px}.profile-buttons{gap:5px}.profile-buttons button{padding:7px 10px}}
+/* Compact, mutually linked dashboard */
+.metric-group{padding:12px 14px;border-radius:13px}
+.metric-group h2{font-size:14px;margin-bottom:9px}
+.metrics{gap:10px;margin-bottom:14px}
+.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.metric-grid .metric{padding:7px 10px;border-radius:9px;min-height:53px}
+.metric-grid .metric.main{grid-column:auto;min-height:53px}
+.metric-grid .metric.main .num,.metric-grid .metric .num{font-size:19px;line-height:1.1;margin-top:2px}
+.metric-grid .metric .sub{display:none!important}
+.metric-grid .metric span:first-child{font-size:12px}
+.metric-total{margin-bottom:9px;padding:8px 13px;border-radius:10px;min-height:45px}
+.metric-total .num{font-size:21px}
+.metric-grid .metric.on{outline:2px solid #8db3e5;outline-offset:1px}
+.metric-grid .metric.main.on{outline:2px solid #74b6ff}
+@media(max-width:520px){.metric-group{padding:10px}.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.metric-grid .metric{padding:7px}.metric-grid .metric.main .num,.metric-grid .metric .num{font-size:18px}}
 </style></head><body>
 <header><h1>인재 Pool 관리</h1><nav style="display:flex;gap:18px;flex-wrap:wrap"><a href="/mail" style="color:#205595;text-decoration:none;font-weight:750">✉ 메일쓰기</a><a href="/followups" style="color:#285f9e;text-decoration:none;font-weight:650">핵심 인재 접촉 점검</a><a href="/duplicate-reviews" style="color:#a2641b;text-decoration:none;font-weight:650">중복 후보 검토</a></nav></header>
 <main>
@@ -103,18 +118,20 @@ button.danger{background:#fff2f2;border:1px solid #f0c9c9;color:#a22929;border-r
 <div class="metrics">
 <section class="metric-group" aria-label="관리 상태별 현황">
 <h2>관리 상태별 현황</h2><div class="metric-grid">
-<button class="metric main" data-metric="status:접촉중"><span>접촉중</span><span class="num" id="status-contact">—</span><span class="sub">현재 접촉 진행 인재</span></button>
-<button class="metric" data-metric="status:검토중"><span>검토중</span><span class="num" id="status-review">—</span></button>
-<button class="metric" data-metric="status:보류"><span>보류</span><span class="num" id="status-hold">—</span></button>
-<button class="metric" data-metric="status:종료"><span>종료</span><span class="num" id="status-closed">—</span></button>
+<button class="metric" data-filter-type="status" data-filter-value=""><span>전체</span><span class="num" id="status-all">—</span></button>
+<button class="metric main" data-filter-type="status" data-filter-value="접촉중"><span>접촉중</span><span class="num" id="status-contact">—</span><span class="sub">현재 접촉 진행 인재</span></button>
+<button class="metric" data-filter-type="status" data-filter-value="검토중"><span>검토중</span><span class="num" id="status-review">—</span></button>
+<button class="metric" data-filter-type="status" data-filter-value="보류"><span>보류</span><span class="num" id="status-hold">—</span></button>
+<button class="metric" data-filter-type="status" data-filter-value="종료"><span>종료</span><span class="num" id="status-closed">—</span></button>
 </div></section>
 <section class="metric-group" aria-label="관심도별 현황">
 <h2>관심도별 현황</h2><div class="metric-grid">
-<button class="metric main" data-metric="priority:핵심"><span>핵심</span><span class="num" id="priority-core">—</span><span class="sub">핵심 관심 인재</span></button>
-<button class="metric" data-metric="priority:높음"><span>높음</span><span class="num" id="priority-high">—</span></button>
-<button class="metric" data-metric="priority:보통"><span>보통</span><span class="num" id="priority-normal">—</span></button>
-<button class="metric" data-metric="priority:낮음"><span>낮음</span><span class="num" id="priority-low">—</span></button>
-<button class="metric" data-metric="priority:미분류"><span>미분류</span><span class="num" id="priority-none">—</span></button>
+<button class="metric" data-filter-type="priority" data-filter-value=""><span>전체</span><span class="num" id="priority-all">—</span></button>
+<button class="metric main" data-filter-type="priority" data-filter-value="핵심"><span>핵심</span><span class="num" id="priority-core">—</span><span class="sub">핵심 관심 인재</span></button>
+<button class="metric" data-filter-type="priority" data-filter-value="높음"><span>높음</span><span class="num" id="priority-high">—</span></button>
+<button class="metric" data-filter-type="priority" data-filter-value="보통"><span>보통</span><span class="num" id="priority-normal">—</span></button>
+<button class="metric" data-filter-type="priority" data-filter-value="낮음"><span>낮음</span><span class="num" id="priority-low">—</span></button>
+<button class="metric" data-filter-type="priority" data-filter-value="미분류"><span>미분류</span><span class="num" id="priority-none">—</span></button>
 </div></section></div>
 <section class="domains"><div class="domainhead"><h2>발굴 요청 분야별 현황</h2><span class="caption" id="domainCaption">검색 질문에서 요청한 분야를 기준으로 집계</span></div><div class="domainlist" id="domainList"></div></section>
 <div class="toolbar"><input id="search" placeholder="연구 분야 · 성명 · 소속 검색"><button id="reset" class="ghost">검색 초기화</button></div>
@@ -126,34 +143,76 @@ button.danger{background:#fff2f2;border:1px solid #f0c9c9;color:#a22929;border-r
 <script>
 "use strict";
 const $=id=>document.getElementById(id),make=(tag,cls,txt)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
-let people=[],selected=null,metric="all",domainFilter="",editing=false;
+let people=[],selected=null,statusFilter="",priorityFilter="",domainFilter="",editing=false;
 async function api(path,opts){const r=await fetch(path,{credentials:"same-origin",...opts});if(!r.ok){let detail="";try{detail=(await r.json()).detail||""}catch{}throw Error(detail||"서버 오류 "+r.status)}return r.json()}
 function field(label,kind,value,options=[]){const box=make("div","field"),lab=make("label","",label),ctrl=make(kind);if(kind==="select")for(const o of options){const opt=make("option","",o);ctrl.append(opt)}if(kind==="textarea")ctrl.rows=3;ctrl.value=value??"";box.append(lab,ctrl);return {box,ctrl}}
+function fieldsOf(p){
+ const fields=p.classification?[p.classification]:(p.requested_fields||[]).filter(Boolean);
+ return [...new Set(fields.length?fields:["미분류"])];
+}
+function matchQuery(p){
+ const term=$("search").value.trim().toLowerCase();
+ return !term||[p.domain,p.name,p.org,p.headline].some(v=>(v||"").toLowerCase().includes(term));
+}
+function matchPerson(p,skip=""){
+ return matchQuery(p)
+   &&(skip==="status"||!statusFilter||p.status===statusFilter)
+   &&(skip==="priority"||!priorityFilter||p.priority===priorityFilter)
+   &&(skip==="domain"||!domainFilter||fieldsOf(p).includes(domainFilter));
+}
+function filteredPeople(skip=""){return people.filter(p=>matchPerson(p,skip))}
+function syncButtons(){
+ document.querySelectorAll("[data-filter-type]").forEach(button=>{
+   const key=button.dataset.filterType,value=button.dataset.filterValue;
+   button.classList.toggle("on",(key==="status"?statusFilter:priorityFilter)===value);
+   button.setAttribute("aria-pressed",String((key==="status"?statusFilter:priorityFilter)===value));
+ });
+ const total=document.querySelector(".metric-total");
+ total.classList.toggle("on",!statusFilter&&!priorityFilter&&!domainFilter);
+}
 function stats(){
  $("total").textContent=people.length;
- const stats=[["status-contact","status","접촉중"],["status-review","status","검토중"],["status-hold","status","보류"],["status-closed","status","종료"],
- ["priority-core","priority","핵심"],["priority-high","priority","높음"],["priority-normal","priority","보통"],["priority-low","priority","낮음"],["priority-none","priority","미분류"]];
- for(const [id,key,value] of stats)$(id).textContent=people.filter(p=>p[key]===value).length;
+ const statuses=filteredPeople("status"),priorities=filteredPeople("priority");
+ const groups=[["status-all",statuses.length],["priority-all",priorities.length],
+ ["status-contact",statuses.filter(p=>p.status==="접촉중").length],
+ ["status-review",statuses.filter(p=>p.status==="검토중").length],
+ ["status-hold",statuses.filter(p=>p.status==="보류").length],
+ ["status-closed",statuses.filter(p=>p.status==="종료").length],
+ ["priority-core",priorities.filter(p=>p.priority==="핵심").length],
+ ["priority-high",priorities.filter(p=>p.priority==="높음").length],
+ ["priority-normal",priorities.filter(p=>p.priority==="보통").length],
+ ["priority-low",priorities.filter(p=>p.priority==="낮음").length],
+ ["priority-none",priorities.filter(p=>p.priority==="미분류").length]];
+ for(const [id,count] of groups)$(id).textContent=count;
+ syncButtons();
 }
 function domains(){
- const counts=new Map();for(const p of people){
- const fields=p.classification?[p.classification]:(p.requested_fields||[]).filter(Boolean);
- for(const key of new Set(fields.length?fields:["미분류"])){counts.set(key,(counts.get(key)||0)+1)}
-}
+ const subset=filteredPeople("domain"),counts=new Map();
+ for(const p of subset)for(const field of fieldsOf(p))counts.set(field,(counts.get(field)||0)+1);
  const ordered=[...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"ko"));
  const root=$("domainList");root.replaceChildren();
- const all=make("button","domaincard domain-all"+(!domainFilter?" on":""));all.append(make("div","domainline","전체 분야 · "+people.length+"명"));
- all.onclick=()=>{domainFilter="";domains();clearDetail();list()};root.append(all);
- for(const [name,count] of ordered){const b=make("button","domaincard"+(domainFilter===name?" on":"")),line=make("div","domainline");
- line.append(make("span","",name),make("span","domaincount",count+"명"));b.append(line);
- b.onclick=()=>{domainFilter=domainFilter===name?"":name;domains();clearDetail();list()};root.append(b)}
- $("domainCaption").textContent=ordered.length+"개 요청 분야 · 클릭하여 필터링";
+ const all=make("button","domaincard domain-all"+(!domainFilter?" on":""));
+ all.append(make("div","domainline","전체 분야 · "+subset.length+"명"));
+ all.setAttribute("aria-pressed",String(!domainFilter));
+ all.onclick=()=>{domainFilter="";renderDashboard();clearIfFiltered();list()};
+ root.append(all);
+ // When a selected field has zero candidates after status/priority changes,
+ // retain it as a visible active zero-count option until manually cleared.
+ if(domainFilter&&!counts.has(domainFilter))ordered.push([domainFilter,0]);
+ for(const [name,count] of ordered){
+ const button=make("button","domaincard"+(domainFilter===name?" on":"")),line=make("div","domainline");
+ line.append(make("span","",name),make("span","domaincount",count+"명"));
+ button.append(line);button.setAttribute("aria-pressed",String(domainFilter===name));
+ button.onclick=()=>{domainFilter=domainFilter===name?"":name;renderDashboard();clearIfFiltered();list()};
+ root.append(button)
+ }
+ $("domainCaption").textContent=ordered.length+"개 요청 분야 · 선택한 관리 상태·관심도를 반영";
 }
-function list(){const term=$("search").value.trim().toLowerCase(),filtered=people.filter(p=>{
-if(metric.startsWith("status:")&&p.status!==metric.slice(7))return false;
-if(metric.startsWith("priority:")&&p.priority!==metric.slice(9))return false;
-if(domainFilter){const groups=p.classification?[p.classification]:(p.requested_fields||[]);if(!groups.includes(domainFilter)&&!(domainFilter==="미분류"&&!groups.length))return false;}
-return !term||[p.domain,p.name,p.org,p.headline].some(v=>(v||"").toLowerCase().includes(term))});
+function renderDashboard(){stats();domains()}
+function clearIfFiltered(){
+ if(selected&&!filteredPeople().some(p=>p.id===selected))clearDetail();
+}
+function list(){const filtered=filteredPeople();
 $("counter").textContent=filtered.length+"명";const root=$("list");root.replaceChildren();if(!filtered.length){root.append(make("div","empty","해당 인재가 없습니다."));return}
 for(const p of filtered){const b=make("button","person"+(selected===p.id?" active":""));b.type="button";
 const top=make("div","top");top.append(make("strong","",p.name||"성명 미등록"));
@@ -242,11 +301,23 @@ async function loadHistory(){const d=await api("/api/talents/"+id+"/contacts");i
 submit.onclick=async()=>{submit.disabled=true;notice.textContent="";try{await api("/api/talents/"+id+"/contacts",{method:"POST",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify({contact_at:day.ctrl.value,channel:channel.ctrl.value,subject:subject.ctrl.value,memo:memo.ctrl.value})});await loadHistory();if(status.ctrl.value==="검토중"){status.ctrl.value="접촉중"}await loadList(false);entry.classList.add("hidden");add.classList.remove("hidden");subject.ctrl.value="";memo.ctrl.value=""}catch(e){notice.className="message error";notice.textContent=e.message}finally{submit.disabled=false}};
 await loadHistory();
 }catch(e){root.replaceChildren(make("p","message error","상세 정보를 불러오지 못했습니다."))}}
-async function loadList(reset=true){try{const d=await api("/api/talents?limit=500");people=d.items;stats();if(reset&&selected&&!people.some(x=>x.id===selected))clearDetail();domains();list()}catch(e){$("list").replaceChildren(make("div","empty","목록 조회에 실패했습니다."))}}
-$("closeDetail").onclick=clearDetail;$("search").oninput=list;$("reset").onclick=()=>{$("search").value="";metric="all";domainFilter="";domains();clearDetail();document.querySelectorAll(".metric").forEach(b=>b.classList.toggle("on",b.dataset.metric==="all"));list()};
-document.querySelectorAll(".metric").forEach(b=>b.onclick=()=>{metric=b.dataset.metric;document.querySelectorAll(".metric").forEach(m=>m.classList.toggle("on",m===b));if(selected){const p=people.find(p=>p.id===selected);
-if(!p||(metric.startsWith("status:")&&p.status!==metric.slice(7))||(metric.startsWith("priority:")&&p.priority!==metric.slice(9)))clearDetail();
-}list()});
+async function loadList(reset=true){try{const d=await api("/api/talents?limit=500");people=d.items;renderDashboard();if(reset&&selected&&!people.some(x=>x.id===selected))clearDetail();clearIfFiltered();list()}catch(e){$("list").replaceChildren(make("div","empty","목록 조회에 실패했습니다."))}}
+$("closeDetail").onclick=clearDetail;
+$("search").oninput=()=>{renderDashboard();clearIfFiltered();list()};
+$("reset").onclick=()=>{
+ $("search").value="";statusFilter="";priorityFilter="";domainFilter="";
+ renderDashboard();clearDetail();list()
+};
+document.querySelector(".metric-total").onclick=()=>{
+ statusFilter="";priorityFilter="";domainFilter="";$("search").value="";
+ renderDashboard();clearDetail();list()
+};
+document.querySelectorAll("[data-filter-type]").forEach(button=>button.onclick=()=>{
+ const kind=button.dataset.filterType,value=button.dataset.filterValue;
+ if(kind==="status")statusFilter=statusFilter===value?"":value;
+ else priorityFilter=priorityFilter===value?"":value;
+ renderDashboard();clearIfFiltered();list()
+});
 document.addEventListener("click",e=>{if(selected&&!e.target.closest(".person,.detail,.panelhead,.metric,.toolbar,.domains,.history-modal"))clearDetail()});
 loadList();
 </script></body></html>

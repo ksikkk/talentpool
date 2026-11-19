@@ -310,6 +310,6 @@ def send_candidate(db,talent_id,values):
     with db:
         db.execute("UPDATE followup_send SET state='accepted' WHERE request_id=?",(rid,))
         add_contact(db,talent_id,"이메일",subject.strip(),
-            "근황 확인 메일 API 발송 요청 승인 / 수신자: "+recipient+" / 요청ID: "+rid,
+            body,
             today().isoformat())
     return response

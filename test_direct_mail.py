@@ -13,8 +13,7 @@ class DirectMailTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.env=patch.dict("os.environ",{
-            "INTERNAL_DB_PATH":str(Path(self.temp.name)/"talent.db"),
-            "FOLLOWUP_APPROVAL_CODE":"test-approval-long-123"
+            "INTERNAL_DB_PATH":str(Path(self.temp.name)/"talent.db")
         })
         self.env.start();self.addCleanup(self.env.stop)
         db=database()
@@ -57,7 +56,7 @@ class DirectMailTests(unittest.TestCase):
     def test_send_uses_one_time_recipient_and_records_contact_once(self):
         db=database();d=m.draft(db,1)
         payload={"recipient":"one-time@research.edu","subject":"연구 협력 문의",
-                 "body":"안녕하세요.","request_id":d["request_id"],"approval_code":"test-approval-long-123"}
+                 "body":"안녕하세요.","request_id":d["request_id"]}
         with patch.object(m,"config",return_value={"sender":"sender@samsung.com"}),patch.object(m,"send_knox",
                 return_value={"status":"api_accepted","message":"API accepted"}) as transport:
             result=m.send(db,1,payload)
@@ -73,26 +72,22 @@ class DirectMailTests(unittest.TestCase):
         self.assertIn("one-time@research.edu",log)
         db.close()
 
-    def test_approval_and_suspended_status_block_send(self):
+    def test_suspended_status_blocks_send_without_approval_code(self):
         db=database();d=m.draft(db,1)
         p={"recipient":"one-time@research.edu","subject":"문의","body":"안녕하세요.",
-           "request_id":d["request_id"],"approval_code":"wrong"}
-        with patch.object(m,"config") as c,patch.object(m,"send_knox") as transport:
-            with self.assertRaisesRegex(ValueError,"승인 코드"):
-                m.send(db,1,p)
-            c.assert_not_called();transport.assert_not_called()
+           "request_id":d["request_id"]}
         with self.assertRaisesRegex(ValueError,"보류"):
             m.draft(db,2)
         with patch.object(m,"send_knox") as transport:
             with self.assertRaisesRegex(ValueError,"보류"):
-                m.send(db,2,{**p,"approval_code":"test-approval-long-123"})
+                m.send(db,2,p)
             transport.assert_not_called()
         db.close()
 
     def test_uncertain_response_never_creates_contact_and_no_retry(self):
         db=database();d=m.draft(db,1)
         p={"recipient":"candidate@research.edu","subject":"연락","body":"안부입니다.",
-           "request_id":d["request_id"],"approval_code":"test-approval-long-123"}
+           "request_id":d["request_id"]}
         with patch.object(m,"config",return_value={"sender":"sender@samsung.com"}),patch.object(m,"send_knox",
                 side_effect=ValueError("timeout")) as transport:
             with self.assertRaises(ValueError):m.send(db,1,p)
@@ -107,7 +102,7 @@ class DirectMailTests(unittest.TestCase):
         with patch.object(m,"config") as c:
             with self.assertRaisesRegex(ValueError,"메일 주소"):
                 m.send(db,1,{"recipient":"bad-address","subject":"제목","body":"내용",
-                    "request_id":d["request_id"],"approval_code":"test-approval-long-123"})
+                    "request_id":d["request_id"]})
             c.assert_not_called()
         db.close()
 

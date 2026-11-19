@@ -46,7 +46,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <p class="note">수신자 주소를 변경해도 인재 DB의 이메일은 변경되지 않습니다. 실제 발송 주소는 접촉 이력에 남습니다.</p>
 <label for="subject">제목</label><input id="subject" maxlength="300" required/>
 <label for="body">본문</label><textarea id="body" maxlength="15000" required></textarea>
-<label for="approval">발송 승인 코드</label><input id="approval" type="password" autocomplete="off" placeholder="관리자가 설정한 승인 코드" required/>
+
 <p id="notice" class="note">메일을 보내면 API 요청 성공 시 접촉 이력이 자동 등록됩니다. 실제 배달 여부는 발신함에서 확인하세요.</p>
 <div class="actions"><button type="button" id="reset">초안 초기화</button><button type="button" class="primary" id="send">최종 확인 후 메일 발송</button></div>
 </div>
@@ -92,8 +92,8 @@ async function selectPerson(id){
  $("recipient").value=data.recipient||"";
  $("subject").value=data.subject;
  $("body").value=data.body;
- $("approval").value="";
- $("notice").className="note";$("notice").textContent="입력한 수신자와 내용을 확인한 뒤 발송 승인 코드를 입력하세요.";
+
+ $("notice").className="note";$("notice").textContent="입력한 수신자·제목·본문을 확인한 뒤 발송하세요.";
  $("send").disabled=false;
  $("empty").classList.add("hidden");$("editor").classList.remove("hidden");
  }catch(e){alert(e.message)}
@@ -102,18 +102,18 @@ $("change").onclick=()=>{$("search").focus();$("search").scrollIntoView({behavio
 $("reset").onclick=()=>{if(selected)selectPerson(selected.talent_id)};
 $("send").onclick=async()=>{
  if(!selected||attempted||busy)return;
- const recipient=$("recipient").value.trim(),subject=$("subject").value.trim(),body=$("body").value,code=$("approval").value;
- if(!recipient||!$("recipient").checkValidity()||!subject||!body.trim()||!code){$("notice").className="error";$("notice").textContent="수신자·제목·본문·승인 코드를 확인하세요.";return}
+ const recipient=$("recipient").value.trim(),subject=$("subject").value.trim(),body=$("body").value;
+ if(!recipient||!$("recipient").checkValidity()||!subject||!body.trim()){$("notice").className="error";$("notice").textContent="수신자·제목·본문을 확인하세요.";return}
  if(!confirm(selected.name+" ("+recipient+")에게 메일 발송을 요청하시겠습니까?\n수신자 주소 변경은 이번 메일에만 적용되고 인재 DB에는 저장되지 않습니다."))return;
  attempted=true;busy=true;$("send").disabled=true;
  $("notice").className="note";$("notice").textContent="Knox 메일 API 발송 요청 중…";
  try{
  const result=await api("/api/mail/send",{method:"POST",headers,
- body:JSON.stringify({talent_id:selected.talent_id,recipient,subject,body,approval_code:code,request_id:selected.request_id})});
+ body:JSON.stringify({talent_id:selected.talent_id,recipient,subject,body,request_id:selected.request_id})});
  $("notice").className="success";$("notice").textContent=result.message+"\n해당 인재의 접촉 이력에 자동 등록했습니다.";
  }catch(e){
  $("notice").className="error";$("notice").textContent=e.message+"\n발송 여부가 불명확할 수 있습니다. 발신함 확인 후 새 작성창을 열어주세요.";
- }finally{busy=false;$("approval").value=""}
+ }finally{busy=false}
 };
 const urlId=Number(new URLSearchParams(location.search).get("talent_id"));
 if(Number.isSafeInteger(urlId)&&urlId>0)selectPerson(urlId);

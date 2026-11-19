@@ -70,7 +70,7 @@ class DirectMailTests(unittest.TestCase):
         self.assertEqual(get_talent(db,1)["status"],"접촉중")
         self.assertEqual(db.execute("SELECT COUNT(*) FROM contact_history").fetchone()[0],1)
         log=db.execute("SELECT memo FROM contact_history").fetchone()[0]
-        self.assertIn("one-time@research.edu",log[0])
+        self.assertIn("one-time@research.edu",log)
         db.close()
 
     def test_approval_and_suspended_status_block_send(self):

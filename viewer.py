@@ -1,4 +1,4 @@
-"""Private, local-only dashboard and CRUD API. No outbound requests."""
+"""Intranet talent dashboard and CRUD API with opt-in internal Knox mail."""
 import os, ipaddress, socket, threading, time
 from contextlib import asynccontextmanager
 from pathlib import Path

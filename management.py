@@ -106,7 +106,7 @@ def edit_talent(db, talent_id, updates):
     if not existing: return None
     converted={("sources_json" if k=="sources" else k):
         (json.dumps(v,ensure_ascii=False) if k=="sources" else v) for k,v in updates.items()}
-    curated={"name","org","headline","domain","summary","why_fit","sources"}
+    curated={"name","org","headline","domain","summary","why_fit","sources","email"}
     edited=set(json.loads(existing.get("edited_fields_json") or "[]"))
     edited.update(curated.intersection(updates))
     converted["edited_fields_json"]=json.dumps(sorted(edited),ensure_ascii=False)

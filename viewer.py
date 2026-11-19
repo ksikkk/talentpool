@@ -36,11 +36,29 @@ async def lifespan(application):
     if configured:
         worker=threading.Thread(target=loop,daemon=True,name="talentpool-mail-poller")
         worker.start()
+    followup_thread=None
+    if os.getenv("FOLLOWUP_NOTIFY_ENABLED")=="1":
+        def followup_loop():
+            from followup_service import notify_due
+            from management import database
+            while not stop.is_set():
+                try:
+                    db=database()
+                    try:
+                        result=notify_due(db)
+                        print("[Talent Pool] Follow-up reminder scan: "+str(result.get("sent",0))+" API accepted.")
+                    finally: db.close()
+                except Exception as exc:
+                    print("[Talent Pool] Follow-up reminder scan failed: "+type(exc).__name__)
+                if stop.wait(24*60*60):break
+        followup_thread=threading.Thread(target=followup_loop,daemon=True,name="talentpool-followup-notifier")
+        followup_thread.start()
     try:
         yield
     finally:
         stop.set()
         if worker: worker.join(timeout=3)
+        if followup_thread: followup_thread.join(timeout=3)
 
 app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None,title="Internal Talent Pool",lifespan=lifespan)
 
@@ -217,3 +235,36 @@ def review_duplicate(review_id:int,decision:dict=Body(...),_=Depends(write_guard
 @app.get("/duplicate-reviews",response_class=HTMLResponse)
 def duplicate_review_page(_=Depends(guard)):
     return Path(__file__).with_name("duplicates.html").read_text(encoding="utf-8")
+
+@app.get("/followups",response_class=HTMLResponse)
+def followup_page(_=Depends(guard)):
+    return Path(__file__).with_name("followups.html").read_text(encoding="utf-8")
+
+@app.get("/api/followups")
+def followup_list(_=Depends(guard)):
+    from followup_service import notices
+    db=database()
+    try:
+        items=notices(db)
+        return {"items":items,"enabled":os.getenv("FOLLOWUP_NOTIFY_ENABLED")=="1"}
+    finally: db.close()
+
+@app.get("/api/followups/{talent_id}/draft")
+def followup_draft(talent_id:int,_=Depends(guard)):
+    from followup_service import draft
+    db=database()
+    try:
+        try:return draft(db,talent_id)
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+    finally:db.close()
+
+@app.post("/api/followups/{talent_id}/send")
+def followup_send(talent_id:int,changes:dict=Body(...),_=Depends(write_guard)):
+    from followup_service import send_candidate
+    required={"recipient","subject","body","approval_code","request_id"}
+    if set(changes)!=required:raise HTTPException(422,"발송 필드를 확인하세요.")
+    db=database()
+    try:
+        try:return send_candidate(db,talent_id,changes)
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+    finally:db.close()

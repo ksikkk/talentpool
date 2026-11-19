@@ -28,6 +28,37 @@ class FollowupTests(unittest.TestCase):
         db.commit()
         db.close()
 
+    def test_edit_sender_notify_without_exposing_credentials(self):
+        import json
+        config_path=Path(self.folder.name)/"followup_mail.local.json"
+        base={"knox_api_url":"https://openapi.samsung.net/example","Authorization":"SENSITIVE",
+              "System-ID":"PRIVATE-ID","sender":"old@samsung.com","notify_email":"old2@samsung.com",
+              "verify_tls":True,"base_url":"http://192.168.1.30:8090"}
+        config_path.write_text(json.dumps(base),encoding="utf-8")
+        with patch.object(f,"CONFIG",config_path):
+            shown=f.public_mail_settings()
+            self.assertNotIn("Authorization",shown)
+            self.assertNotIn("System-ID",shown)
+            with self.assertRaises(ValueError):
+                f.save_mail_addresses("new@samsung.com","alert@samsung.com","wrong")
+            with self.assertRaises(ValueError):
+                f.save_mail_addresses("outsider@example.org","alert@samsung.com","testing-long-secret")
+            updated=f.save_mail_addresses("new@samsung.com","alert@samsung.com","testing-long-secret")
+            self.assertEqual(updated["sender"],"new@samsung.com")
+            result=json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["Authorization"],"SENSITIVE")
+            self.assertEqual(result["System-ID"],"PRIVATE-ID")
+
+    def test_edit_talent_email_from_composer_requires_approval(self):
+        db=database()
+        with self.assertRaises(ValueError):
+            f.save_talent_recipient(db,1,"new@example.org","wrong")
+        self.assertEqual(get_talent(db,1)["email"],"researcher@example.org")
+        result=f.save_talent_recipient(db,1,"new@example.org","testing-long-secret")
+        self.assertEqual(result["recipient"],"new@example.org")
+        self.assertEqual(get_talent(db,1)["email"],"new@example.org")
+        db.close()
+
     def test_month_end_and_leap_day(self):
         self.assertEqual(f.add_months(date(2026,8,31)),date(2027,2,28))
         self.assertEqual(f.add_months(date(2023,8,31)),date(2024,2,29))

@@ -261,7 +261,7 @@ def followup_draft(talent_id:int,_=Depends(guard)):
 @app.post("/api/followups/{talent_id}/send")
 def followup_send(talent_id:int,changes:dict=Body(...),_=Depends(write_guard)):
     from followup_service import send_candidate
-    required={"recipient","subject","body","approval_code","request_id"}
+    required={"recipient","subject","body","request_id"}
     if set(changes)!=required:raise HTTPException(422,"발송 필드를 확인하세요.")
     db=database()
     try:
@@ -279,7 +279,7 @@ def followup_settings(_=Depends(guard)):
 @app.patch("/api/followups/settings")
 def followup_settings_save(changes:dict=Body(...),_=Depends(write_guard)):
     from followup_service import save_mail_addresses
-    if set(changes)!={"sender","notify_email","approval_code"}:
+    if set(changes)!={"sender","notify_email"}:
         raise HTTPException(422,"메일 설정 필드를 확인하세요.")
     try:return save_mail_addresses(**changes)
     except ValueError as exc:raise HTTPException(422,str(exc)) from None
@@ -318,7 +318,7 @@ def general_mail_draft(talent_id:int,_=Depends(guard)):
 @app.post("/api/mail/send")
 def general_mail_send(changes:dict=Body(...),_=Depends(write_guard)):
     from direct_mail import send
-    required={"talent_id","recipient","subject","body","approval_code","request_id"}
+    required={"talent_id","recipient","subject","body","request_id"}
     if set(changes)!=required or type(changes["talent_id"]) is not int or changes["talent_id"]<1:
         raise HTTPException(422,"메일 발송 항목을 확인하세요.")
     db=database()

@@ -4,6 +4,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from receiver import connect_db
+from identity_quality import evidence_quality
 
 STATUSES = ("검토대기", "검토중", "관심", "접촉예정", "접촉중", "보류", "종료")
 PRIORITIES = ("미분류", "핵심", "높음", "보통", "낮음")
@@ -53,6 +54,7 @@ def database():
 def talent_as_dict(row):
     item = dict(row)
     item["sources"] = json.loads(item.pop("sources_json"))
+    item["source_quality"] = evidence_quality(item)
     item["requested_fields"] = json.loads(item.pop("field_groups_json") or "[]")
     item["has_contact"] = bool(item.get("contact_count", 0))
     return item

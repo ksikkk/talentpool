@@ -121,6 +121,10 @@ def import_refresh_mail(db,raw,secret,trusted_sender):
         if db.execute("SELECT 1 FROM refresh_batch WHERE batch_id=?",(batch,)).fetchone():
             return "duplicate"
         now=datetime.now(timezone.utc).isoformat()
+        # Conflicting suggestions for the same person/field are not safe
+        # to choose between without independent verification.
+        from collections import Counter
+        field_counts=Counter((name,org,field) for _,name,org,field,*_ in items)
         # Resolve each incoming person once from the ORIGINAL org/name.
         people={}
         for item in items:
@@ -132,7 +136,9 @@ def import_refresh_mail(db,raw,secret,trusted_sender):
                 people[key]=rows[0] if len(rows)==1 else None
             row=people[key]
             outcome="skipped_unmatched_identity"
-            if row is not None:
+            if field_counts[(name,org,field)]>1:
+                outcome="skipped_conflicting_suggestions"
+            elif row is not None:
                 # Protect manual edits, stale reports, and unclear evidence.
                 edited=set(json.loads(row["edited_fields_json"] or "[]")) if "edited_fields_json" in row.keys() else set()
                 from identity_quality import kinds

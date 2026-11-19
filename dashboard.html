@@ -180,7 +180,7 @@ save.onclick=async()=>{save.disabled=true;message.textContent="";try{
 const changes={};for(const [key,ctrl] of Object.entries(input)){if(ctrl.value.trim()!==(t[key]||""))changes[key]=ctrl.value.trim()}
 const newSources=urls.ctrl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
 if(JSON.stringify(newSources)!==JSON.stringify(t.sources||[]))changes.sources=newSources;
-
+if(!Object.keys(changes).length){message.textContent="변경된 내용이 없습니다.";editMode(false);save.disabled=false;return}
 const res=await api("/api/talents/"+id,{method:"PATCH",headers:{"Content-Type":"application/json","X-Internal-Action":"1"},body:JSON.stringify(changes)});
 message.className="message";message.textContent="저장했습니다.";await loadList(false);head.querySelector("h2").textContent=res.name;for(const f of editFields)f.view.textContent=f.ctrl.value||"—";editMode(false)
 }catch(e){message.className="message error";message.textContent="저장 실패: "+e.message}finally{save.disabled=false}};

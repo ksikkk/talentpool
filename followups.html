@@ -23,12 +23,27 @@ textarea{resize:vertical;min-height:190px}.actions{display:flex;justify-content:
 <body><header><a href="/">← 인재 Pool 관리</a><h1>핵심 인재 접촉 점검</h1></header>
 <main><h2>6개월 접촉 주기</h2>
 <p>최근 접촉 이력이 있는 핵심 인재 중 6개월 이상 경과한 대상자를 표시합니다. 알림이 발송되어도 인재에게 메일이 자동 발송되지는 않습니다. 담당자가 초안을 수정하고 승인 코드를 입력해야 발송됩니다.</p>
+<section class="panel">
+<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+<h2>메일 주소 설정</h2><button type="button" id="toggleSettings">주소 설정 열기</button>
+</div>
+<p class="sub">발송자 및 알림 수신 주소는 이 화면에서 변경할 수 있습니다. API 인증 정보는 표시되지 않습니다.</p>
+<div id="settingsPanel" hidden>
+<label>발송자 사내 메일 주소<input id="senderAddress" type="email" autocomplete="off" placeholder="sender@samsung.com"></label>
+<label>6개월 알림 수신 주소<input id="notifyAddress" type="email" autocomplete="off" placeholder="manager@samsung.com"></label>
+<label>설정 변경 승인 코드<input id="settingsApproval" type="password" autocomplete="off"></label>
+<div class="actions"><button type="button" class="primary" id="saveSettings">메일 주소 설정 저장</button></div>
+</div>
+<p id="settingsStatus" class="sub"></p>
+</section>
 <section class="panel"><h2>근황 확인 대상</h2><div id="status" class="sub">불러오는 중…</div><div id="items"></div></section></main>
 <dialog id="composer"><div class="dialog-content">
 <div style="display:flex;justify-content:space-between;align-items:center"><h2>근황 확인 메일 작성</h2><button id="close" type="button">닫기 ×</button></div>
-<p>수신자는 인재의 등록 이메일로 고정됩니다. 제목과 본문을 자유롭게 수정할 수 있습니다.</p>
+<p>인재 이메일을 수정하려면 주소 입력 후 ‘인재 이메일 저장’을 누르세요. 메일 발송은 별도의 최종 확인 이후에만 진행됩니다.</p>
 <form id="form">
-<label>받는 사람<input id="recipient" type="email" readonly></label>
+<label>받는 사람 (인재 이메일)<input id="recipient" type="email" maxlength="254" required></label>
+<div class="actions" style="margin-top:7px"><button id="saveRecipient" type="button">인재 이메일 저장</button></div>
+<p id="recipientStatus" class="sub"></p>
 <label>제목<input id="subject" maxlength="300" required></label>
 <label>본문<textarea id="body" maxlength="15000" required></textarea></label>
 <label>발송 승인 코드<input id="approval" type="password" autocomplete="off" required placeholder="사내 관리자가 설정한 승인 코드"></label>
@@ -39,18 +54,53 @@ textarea{resize:vertical;min-height:190px}.actions{display:flex;justify-content:
 "use strict";
 const $=id=>document.getElementById(id);
 let current=null,busy=false,attempted=false;
+const editHeaders={"Content-Type":"application/json","X-Internal-Action":"1"};
 async function api(url,options={}){
  const res=await fetch(url,{credentials:"same-origin",...options});
  const data=await res.json();
  if(!res.ok)throw Error(data.detail||"서버 요청 오류 "+res.status);
  return data;
 }
+async function loadSettings(){
+ try{
+ const x=await api("/api/followups/settings");
+ $("senderAddress").value=x.sender||"";
+ $("notifyAddress").value=x.notify_email||"";
+ $("settingsStatus").textContent=x.configured?"설정 파일 연결됨 · 변경 시 승인 코드 필요":"followup_mail.local.json 파일이 없습니다. 사내 PC의 저장소 폴더에 파일을 먼저 생성하세요.";
+ }catch(e){$("settingsStatus").textContent="설정 확인 오류: "+e.message}
+}
+$("toggleSettings").onclick=()=>{const p=$("settingsPanel");p.hidden=!p.hidden;$("toggleSettings").textContent=p.hidden?"주소 설정 열기":"주소 설정 닫기"};
+$("saveSettings").onclick=async()=>{
+ const b=$("saveSettings");b.disabled=true;
+ try{
+ const result=await api("/api/followups/settings",{method:"PATCH",headers:editHeaders,
+ body:JSON.stringify({sender:$("senderAddress").value.trim(),notify_email:$("notifyAddress").value.trim(),approval_code:$("settingsApproval").value})});
+ $("settingsStatus").className="ok";$("settingsStatus").textContent="발송자 "+result.sender+" / 알림 수신자 "+result.notify_email+" 저장 완료";
+ $("settingsApproval").value="";
+ }catch(e){$("settingsStatus").className="error";$("settingsStatus").textContent=e.message}
+ finally{b.disabled=false}
+};
+$("saveRecipient").onclick=async()=>{
+ if(!current||busy||attempted)return;
+ const recipient=$("recipient").value.trim();
+ if(!confirm(current.name+"님의 인재 이메일을 "+recipient+" (으)로 변경·저장하시겠습니까?\n이 동작은 메일을 발송하지 않습니다."))return;
+ const button=$("saveRecipient");button.disabled=true;
+ try{
+ const result=await api("/api/followups/"+current.talent_id+"/recipient",{method:"PATCH",headers:editHeaders,
+ body:JSON.stringify({recipient,approval_code:$("approval").value})});
+ current.recipient=result.recipient;
+ $("recipient").value=result.recipient;
+ $("recipientStatus").className="ok";$("recipientStatus").textContent="인재 이메일이 프로필에 저장되었습니다. 발송은 별도로 확인해야 합니다.";
+ $("approval").value="";
+ }catch(e){$("recipientStatus").className="error";$("recipientStatus").textContent=e.message}
+ finally{button.disabled=false}
+};
 async function openDraft(id){
  try{
  const x=await api("/api/followups/"+id+"/draft");
  current=x;busy=false;attempted=false;
  $("recipient").value=x.recipient;$("subject").value=x.subject;$("body").value=x.body;$("approval").value="";
- $("sendStatus").textContent="";$("send").disabled=false;
+ $("sendStatus").textContent="";$("recipientStatus").textContent="";$("send").disabled=false;
  $("composer").showModal();
  }catch(e){alert(e.message)}
 }
@@ -76,7 +126,8 @@ $("close").onclick=close;$("cancel").onclick=close;
 $("composer").addEventListener("cancel",e=>{if(busy)e.preventDefault()});
 $("form").onsubmit=async e=>{
  e.preventDefault();if(!current||busy||attempted)return;
- if(!confirm(current.name+"님에게 메일 API 발송을 요청하시겠습니까?\n발송 요청이 수락되면 접촉 이력에 기록됩니다."))return;
+ if($("recipient").value.trim()!==current.recipient){$("sendStatus").className="error";$("sendStatus").textContent="수신자 주소를 먼저 ‘인재 이메일 저장’ 버튼으로 저장하세요.";return}
+ if(!confirm(current.name+"님 ("+current.recipient+")에게 메일 API 발송을 요청하시겠습니까?\n발송 요청이 수락되면 접촉 이력에 기록됩니다."))return;
  busy=true;attempted=true;$("send").disabled=true;$("sendStatus").className="sub";$("sendStatus").textContent="메일 API 요청 중…";
  try{
  const answer=await api("/api/followups/"+current.talent_id+"/send",
@@ -89,5 +140,6 @@ $("form").onsubmit=async e=>{
  $("sendStatus").className="error";$("sendStatus").textContent=err.message+"\n전송 여부를 사내 메일함에서 확인하고 새 작성창을 열어주세요.";
  }finally{busy=false;$("approval").value=""}
 };
+loadSettings();
 refresh().then(()=>{const id=Number(new URLSearchParams(location.search).get("talent_id"));if(Number.isSafeInteger(id)&&id>0)openDraft(id)});
 </script></body></html>

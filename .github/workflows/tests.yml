@@ -1,0 +1,22 @@
+name: Talent Pool tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q .
+      - run: python -m unittest discover -p "test_*.py" -v
+        env:
+          FOLLOWUP_NOTIFY_ENABLED: '0'

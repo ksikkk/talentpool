@@ -108,17 +108,6 @@ def save_mail_addresses(sender,notify_email,approval_code):
     return {"configured":True,"sender":sender,"notify_email":notify_email}
 
 
-def save_talent_recipient(db,talent_id,recipient,approval_code):
-    """Explicitly save the confirmed recipient before allowing a mail to send."""
-    check_approval(approval_code)
-    from management import get_talent, edit_talent
-    t=get_talent(db,talent_id)
-    if not t or t["priority"]!="핵심" or t["status"] in ("보류","종료"):
-        raise ValueError("활성 핵심 인재만 메일 주소를 변경할 수 있습니다.")
-    recipient=email_address(recipient)
-    edit_talent(db,talent_id,{"email":recipient})
-    return {"recipient":recipient}
-
 def configure_proxy():
     values=["openapi.samsung.net"]
     for name in ("NO_PROXY", "no_proxy"):
@@ -281,9 +270,11 @@ def draft(db,talent_id):
     t=get_talent(db,talent_id)
     if not t or t["priority"]!="핵심" or t["status"] in ("보류","종료"):
         raise ValueError("활성 핵심 인재만 메일을 작성할 수 있습니다.")
-    if not t.get("email"):
-        raise ValueError("대상자의 공개 업무용 이메일이 등록되지 않았습니다.")
-    recipient=email_address(t["email"])
+    # The compose form may enter a one-time recipient even if no address
+    # is saved on the talent profile. Drafting never modifies that profile.
+    recipient=t.get("email") or ""
+    if recipient:
+        recipient=email_address(recipient)
     return {"talent_id":talent_id,"name":t["name"],"org":t["org"],
             "recipient":recipient,
             "subject":"안녕하세요, "+t["name"]+"님. 근황 인사드립니다.",
@@ -298,9 +289,9 @@ def send_candidate(db,talent_id,values):
     t=get_talent(db,talent_id)
     if not t or t["priority"]!="핵심" or t["status"] in ("보류","종료"):
         raise ValueError("핵심 관리 중인 인재만 발송할 수 있습니다.")
-    recipient=email_address(t.get("email",""))
-    if values.get("recipient")!=recipient:
-        raise ValueError("수신자는 인재 프로필에 등록된 주소와 일치해야 합니다.")
+    # A recipient entered in the composer is limited to this single mail.
+    # Keep the talent's stored address unchanged; audit the actual destination.
+    recipient=email_address(values.get("recipient",""))
     subject=values.get("subject","")
     body=values.get("body","")
     rid=values.get("request_id","")

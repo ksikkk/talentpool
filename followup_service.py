@@ -5,7 +5,6 @@ approval policies; failed/uncertain attempts are never silently retried.
 """
 import calendar
 import hashlib
-import hmac
 import html
 import json
 import os
@@ -55,13 +54,6 @@ def config():
 
 
 
-def check_approval(code):
-    """Protect all mail configuration and recipient edits with a local approval secret."""
-    secret=os.getenv("FOLLOWUP_APPROVAL_CODE","")
-    if not isinstance(code,str) or len(secret)<10 or not hmac.compare_digest(code,secret):
-        raise ValueError("발송 승인 코드를 확인하세요.")
-
-
 def public_mail_settings():
     """Never expose Authorization, System-ID, API URL, or other secrets."""
     existing=CONFIG.exists()
@@ -72,12 +64,11 @@ def public_mail_settings():
     return {"configured":existing,
             "sender":values.get("sender",""),
             "notify_email":values.get("notify_email",""),
-            "approval_required":True}
+            "approval_required":False}
 
 
-def save_mail_addresses(sender,notify_email,approval_code):
+def save_mail_addresses(sender,notify_email):
     """Edit only two addresses; retain all Knox API secrets in the local file."""
-    check_approval(approval_code)
     sender=email_address(sender)
     notify_email=email_address(notify_email)
     if not sender.lower().endswith("@samsung.com") or not notify_email.lower().endswith("@samsung.com"):
@@ -285,7 +276,6 @@ def draft(db,talent_id):
 def send_candidate(db,talent_id,values):
     from management import get_talent, add_contact
     c=config()
-    check_approval(values.get("approval_code",""))
     t=get_talent(db,talent_id)
     if not t or t["priority"]!="핵심" or t["status"] in ("보류","종료"):
         raise ValueError("핵심 관리 중인 인재만 발송할 수 있습니다.")

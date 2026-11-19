@@ -70,7 +70,7 @@ summary{cursor:pointer;color:#2b5e9d;font-weight:600;margin-bottom:12px}
 button.danger{background:#fff2f2;border:1px solid #f0c9c9;color:#a22929;border-radius:9px;padding:9px 13px}
 .field label{margin-bottom:2px}
 </style></head><body>
-<header><h1>인재 Pool 관리</h1><a href="/monthly-reviews" style="color:#285f9e;text-decoration:none;font-weight:650">월간 정보 점검</a></header>
+<header><h1>인재 Pool 관리</h1><nav style="display:flex;gap:18px;flex-wrap:wrap"><a href="/duplicate-reviews" style="color:#a2641b;text-decoration:none;font-weight:650">중복 후보 검토</a><a href="/monthly-reviews" style="color:#285f9e;text-decoration:none;font-weight:650">월간 정보 점검</a></nav></header>
 <main><div class="metrics">
 <button class="metric on" data-metric="all"><span>전체 등록 인재</span><span class="num" id="total">—</span><span class="sub">전체 후보 보기</span></button>
 <button class="metric" data-metric="core"><span>핵심 관리</span><span class="num" id="core">—</span><span class="sub">관심도 ‘핵심’</span></button>
@@ -123,6 +123,11 @@ function clearDetail(){selected=null;editing=false;$("details").replaceChildren(
 async function choose(id,force=false){if(selected===id&&!force){clearDetail();return}selected=id;editing=false;list();$("workspace").classList.add("expanded");$("closeDetail").classList.remove("hidden");const root=$("details");root.replaceChildren();
 try{const t=await api("/api/talents/"+id);if(selected!==id)return;
 const head=make("div","detailhead");head.append(make("h2","",t.name));root.append(head);
+const evidence=make("div","evidenceSummary");
+evidence.style.cssText="background:#f2f7fd;border:1px solid #dce8f6;border-radius:11px;padding:12px;margin-bottom:18px;font-size:13px";
+evidence.append(make("strong","","공개 근거: "+(t.source_quality?.grade||"추가 검증 필요")));
+const desc=make("div","note",t.source_quality?.note||"도메인 유형 기반 참고 정보입니다. 원문 확인이 필요합니다.");evidence.append(desc);
+const kinds=make("div","note",(t.source_quality?.sources||[]).map(x=>x.kind).join(" · "));evidence.append(kinds);root.append(evidence);
 const grid=make("div","profilegrid"),input={};
 const editFields=[];
 function profileField(f,value){f.box.classList.add("display-control");const view=make("div","plain-value",value||"—");f.box.append(view);editFields.push({ctrl:f.ctrl,view});return f}

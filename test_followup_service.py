@@ -77,6 +77,27 @@ class FollowupTests(unittest.TestCase):
         self.assertEqual(get_talent(db,1)["email"],"")
         db.close()
 
+    def test_config_accepts_false_tls_verification(self):
+        import json
+        cfg=Path(self.folder.name)/"followup_mail.local.json"
+        data={"knox_api_url":"https://openapi.samsung.net/example",
+              "Authorization":"TEST","System-ID":"TEST","sender":"sender@samsung.com",
+              "notify_email":"manager@samsung.com","verify_tls":False,
+              "base_url":"http://192.168.1.30:8090"}
+        cfg.write_text(json.dumps(data),encoding="utf-8")
+        with patch.object(f,"CONFIG",cfg):
+            self.assertIs(f.config()["verify_tls"],False)
+            data["verify_tls"]=True
+            cfg.write_text(json.dumps(data),encoding="utf-8")
+            self.assertIs(f.config()["verify_tls"],True)
+            data["verify_tls"]="/approved/company-ca.pem"
+            cfg.write_text(json.dumps(data),encoding="utf-8")
+            self.assertEqual(f.config()["verify_tls"],"/approved/company-ca.pem")
+            data["verify_tls"]=0
+            cfg.write_text(json.dumps(data),encoding="utf-8")
+            with self.assertRaisesRegex(ValueError,"verify_tls"):
+                f.config()
+
     def test_month_end_and_leap_day(self):
         self.assertEqual(f.add_months(date(2026,8,31)),date(2027,2,28))
         self.assertEqual(f.add_months(date(2023,8,31)),date(2024,2,29))

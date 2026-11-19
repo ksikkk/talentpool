@@ -126,7 +126,7 @@ def add_contact(db,talent_id,channel,subject,memo,contact_at):
     from datetime import date
     if channel not in CONTACT_TYPES or not isinstance(subject,str) or not subject.strip() or len(subject)>200:
         raise ValueError("invalid contact")
-    if not isinstance(memo,str) or len(memo)>4000: raise ValueError("invalid contact")
+    if not isinstance(memo,str) or len(memo)>15000: raise ValueError("invalid contact")
     try:
         if date.fromisoformat(contact_at).isoformat()!=contact_at: raise ValueError()
     except (ValueError,TypeError): raise ValueError("invalid contact date")

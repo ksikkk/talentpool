@@ -6,6 +6,7 @@ from email.parser import BytesParser
 from email.utils import parseaddr, getaddresses
 from pathlib import Path
 from urllib.parse import urlparse
+from identity_quality import compare_profiles, profile_ids
 
 def connect_db(path):
     p=Path(path); p.parent.mkdir(parents=True,exist_ok=True)
@@ -36,6 +37,18 @@ def connect_db(path):
     )""")
     db.execute("""INSERT OR IGNORE INTO talent_field(talent_id,field)
         SELECT id,requested_field FROM talent WHERE requested_field!=''""")
+    db.execute("""CREATE TABLE IF NOT EXISTS duplicate_review (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        org TEXT NOT NULL,
+        candidate_json TEXT NOT NULL,
+        matched_talent_id INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        resolution TEXT NOT NULL DEFAULT '검토대기',
+        created_at TEXT NOT NULL,
+        UNIQUE(batch_id,name,org,matched_talent_id)
+    )""")
     db.commit()
     return db
 
@@ -130,6 +143,28 @@ def import_mail(db,raw,secret,trusted_sender):
         curated_available="edited_fields_json" in columns
         for p in people:
             identity=key_for(p)
+            # Never silently merge names sharing an institutional affiliation.
+            # If a strong profile ID is reused with a different name, quarantine.
+            matched=db.execute("SELECT * FROM talent WHERE identity_key=?",(identity,)).fetchone()
+            existing=db.execute("SELECT * FROM talent WHERE deleted_at IS NULL AND name=? AND org=? LIMIT 15",
+                                (p["name"],p["org"])).fetchall() if "deleted_at" in columns else db.execute(
+                                "SELECT * FROM talent WHERE name=? AND org=? LIMIT 15",(p["name"],p["org"])).fetchall()
+            possible=[]
+            for old in existing + ([matched] if matched and all(old["id"]!=matched["id"] for old in existing) else []):
+                old_person={**dict(old),"sources":json.loads(old["sources_json"])}
+                tier,reason=compare_profiles(p,old_person)
+                if old["identity_key"]==identity and tier in ("confirmed_id","exact_record"):
+                    continue
+                if old["identity_key"]!=identity and tier=="distinct":
+                    continue
+                possible.append((old["id"],reason))
+            if possible:
+                for old_id,reason in possible:
+                    db.execute("""INSERT OR IGNORE INTO duplicate_review(
+                      batch_id,name,org,candidate_json,matched_talent_id,reason,created_at)
+                      VALUES(?,?,?,?,?,?,?)""",
+                      (batch,p["name"],p["org"],json.dumps(p,ensure_ascii=False),old_id,reason,now))
+                continue
             db.execute("""INSERT OR IGNORE INTO talent(identity_key,name,org,headline,domain,location,summary,why_fit,sources_json,created_at,updated_at,requested_field,email,email_source)
               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
               (identity,p["name"],p["org"],p["headline"],p["domain"],p["location"],p["summary"],

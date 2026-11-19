@@ -48,6 +48,30 @@ class ManagementTests(unittest.TestCase):
         self.assertEqual(len([t for t in list_talents(db) if t["has_contact"]]),1)
         db.close()
 
+    def test_contact_advances_review_to_contacting(self):
+        db=database()
+        self.assertEqual(get_talent(db,1)["status"],"검토중")
+        add_contact(db,1,"이메일","1차 접촉","이력 등록","2026-11-19")
+        self.assertEqual(get_talent(db,1)["status"],"접촉중")
+        self.assertEqual(len(list_talents(db,status="접촉중")),1)
+        db.close()
+
+    def test_contact_does_not_reopen_held_or_closed_talent(self):
+        for state in ("보류","종료"):
+            with self.subTest(state=state):
+                db=database()
+                edit_talent(db,1,{"status":state})
+                add_contact(db,1,"전화",state+" 후 이력","추가 기록","2026-11-19")
+                self.assertEqual(get_talent(db,1)["status"],state)
+                db.close()
+
+    def test_contact_does_not_override_already_contacting(self):
+        db=database()
+        edit_talent(db,1,{"status":"접촉중"})
+        add_contact(db,1,"미팅","추가 접촉","기록","2026-11-19")
+        self.assertEqual(get_talent(db,1)["status"],"접촉중")
+        db.close()
+
     def test_manual_profile_edit_survives_reimport(self):
         from receiver import import_mail
         from test_receiver import sample_mail, SECRET, SENDER

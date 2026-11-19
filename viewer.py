@@ -285,13 +285,3 @@ def followup_settings_save(changes:dict=Body(...),_=Depends(write_guard)):
     except ValueError as exc:raise HTTPException(422,str(exc)) from None
 
 
-@app.patch("/api/followups/{talent_id}/recipient")
-def followup_recipient_save(talent_id:int,changes:dict=Body(...),_=Depends(write_guard)):
-    from followup_service import save_talent_recipient
-    if set(changes)!={"recipient","approval_code"}:
-        raise HTTPException(422,"수신자 저장 필드를 확인하세요.")
-    db=database()
-    try:
-        try:return save_talent_recipient(db,talent_id,**changes)
-        except ValueError as exc:raise HTTPException(422,str(exc)) from None
-    finally:db.close()

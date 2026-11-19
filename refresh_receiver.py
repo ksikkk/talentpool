@@ -85,18 +85,72 @@ def parse_refresh_mail(raw, secret, sender):
     return batch,out
 
 def import_refresh_mail(db,raw,secret,trusted_sender):
+    """Apply signed, unambiguous public changes automatically; audit every decision.
+
+    Never call an outside API. A signature proves the sender, NOT the truth of
+    an AI-researched claim, so refuse ambiguous/unsupported/contradictory changes.
+    """
     parsed=parse_refresh_mail(raw,secret,trusted_sender)
     if parsed is None:return "ignored"
     batch,items=parsed
     create_refresh_table(db)
+    # Keep old schema as a migration path and preserve legacy records.
+    cols={r["name"] for r in db.execute("PRAGMA table_info(talent)")}
+    if "last_public_refresh" not in cols:
+        db.execute("ALTER TABLE talent ADD COLUMN last_public_refresh TEXT NOT NULL DEFAULT ''")
+    db.execute("""CREATE TABLE IF NOT EXISTS applied_refresh (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        talent_id INTEGER,
+        candidate_name TEXT NOT NULL,
+        field TEXT NOT NULL,
+        old_value TEXT NOT NULL,
+        new_value TEXT NOT NULL,
+        evidence_url TEXT NOT NULL,
+        result TEXT NOT NULL,
+        applied_at TEXT NOT NULL,
+        UNIQUE(batch_id,candidate_name,field,evidence_url)
+    )""")
     with db:
         if db.execute("SELECT 1 FROM refresh_batch WHERE batch_id=?",(batch,)).fetchone():
             return "duplicate"
         now=datetime.now(timezone.utc).isoformat()
-        db.executemany("""INSERT OR IGNORE INTO pending_refresh(
-            batch_id,candidate_name,previous_org,field,old_value,proposed_value,
-            evidence_url,evidence_excerpt,reason,created_at
-        ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            [(*item,now) for item in items])
+        # Resolve each incoming person once from the ORIGINAL org/name.
+        people={}
+        for item in items:
+            _,name,org,field,old,new,proof,excerpt,reason=item
+            key=(name,org)
+            if key not in people:
+                rows=db.execute("""SELECT * FROM talent
+                    WHERE name=? AND org=? AND deleted_at IS NULL""",(name,org)).fetchall()
+                people[key]=rows[0] if len(rows)==1 else None
+            row=people[key]
+            outcome="skipped_unmatched_identity"
+            if row is not None:
+                # Protect manual edits, stale reports, and unclear evidence.
+                edited=set(json.loads(row["edited_fields_json"] or "[]")) if "edited_fields_json" in row.keys() else set()
+                from identity_quality import kinds
+                quality=kinds(proof)
+                value=row[field] or ""
+                if field in edited:
+                    outcome="skipped_manually_curated"
+                elif value.strip().casefold()!=old.strip().casefold():
+                    outcome="skipped_stale_or_conflicting"
+                elif quality not in ("교육·연구기관 도메인","공공기관 도메인","연구자 식별정보"):
+                    outcome="skipped_weak_source"
+                elif new.strip().casefold()==value.strip().casefold():
+                    outcome="unchanged"
+                else:
+                    updates={field:new,"updated_at":now,"last_public_refresh":now}
+                    if field=="email":updates["email_source"]=proof
+                    assignments=", ".join(k+"=?" for k in updates)
+                    db.execute("UPDATE talent SET "+assignments+" WHERE id=?",
+                               (*updates.values(),row["id"]))
+                    outcome="applied"
+                    # Future changes in same batch compare to their own original values.
+            db.execute("""INSERT OR IGNORE INTO applied_refresh
+                (batch_id,talent_id,candidate_name,field,old_value,new_value,evidence_url,result,applied_at)
+                VALUES(?,?,?,?,?,?,?,?,?)""",
+                (batch,row["id"] if row else None,name,field,old,new,proof,outcome,now))
         db.execute("INSERT INTO refresh_batch(batch_id,received_at,item_count) VALUES(?,?,?)",(batch,now,len(items)))
     return "imported"

@@ -135,6 +135,9 @@ def add_contact(db,talent_id,channel,subject,memo,contact_at):
         cur=db.execute(
             "INSERT INTO contact_history(talent_id,contact_at,channel,subject,memo,created_at) VALUES(?,?,?,?,?,?)",
             (talent_id,contact_at,channel,subject.strip(),memo,now()))
+        # Adding a real contact advances only actively-reviewed candidates.
+        # Paused and closed candidates must never be reopened automatically.
+        db.execute("UPDATE talent SET status='접촉중' WHERE id=? AND status='검토중'", (talent_id,))
     return cur.lastrowid
 
 def contacts(db,talent_id):

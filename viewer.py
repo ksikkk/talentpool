@@ -189,3 +189,31 @@ def monthly_review_page(_=Depends(guard)):
 @app.get("/api/mail-status")
 def mail_status(_=Depends(guard)):
     return dict(_mail_state)
+
+@app.get("/api/duplicate-reviews")
+def duplicate_review_items(_=Depends(guard)):
+    from duplicate_review import pending
+    db=database()
+    try:
+        return {"items":pending(db)}
+    finally:
+        db.close()
+
+
+@app.post("/api/duplicate-reviews/{review_id}")
+def review_duplicate(review_id:int,decision:dict=Body(...),_=Depends(write_guard)):
+    from duplicate_review import resolve
+    if set(decision)!={"decision"} or decision["decision"] not in ("same","distinct"):
+        raise HTTPException(422,"Select same or distinct")
+    db=database()
+    try:
+        if not resolve(db,review_id,decision["decision"]):
+            raise HTTPException(404,"Review not found")
+        return {"resolved":decision["decision"]}
+    finally:
+        db.close()
+
+
+@app.get("/duplicate-reviews",response_class=HTMLResponse)
+def duplicate_review_page(_=Depends(guard)):
+    return Path(__file__).with_name("duplicates.html").read_text(encoding="utf-8")
